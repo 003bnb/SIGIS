@@ -1,0 +1,12 @@
+{
+  "name": "sigis-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interface web SIGIS servie par Nginx",
+  "scripts": {
+    "build": "tailwindcss -i ./styles.css -o ./dist/styles.css --minify && cp index.html admission.html dashboard.html app.js ./dist/"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153a62">
+  <title>Tableau de bord | SIGIS</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="app-page min-h-screen">
+  <header class="topbar">
+    <a class="brand" href="/dashboard.html"><span class="brand-mark">S</span><span>SIGIS</span></a>
+    <div class="topbar-user"><span id="user-name"></span><span class="role-badge" id="user-role"></span>
+      <button class="button button-quiet" id="logout-button" type="button">Déconnexion</button>
+    </div>
+  </header>
+  <main class="workspace">
+    <section class="page-heading">
+      <div><p class="eyebrow">Vue d’ensemble</p><h1>Tableau de bord</h1><p class="muted">Suivi des inscriptions et de la scolarité.</p></div>
+      <a class="button button-secondary" href="/admission.html">Nouvelle candidature</a>
+    </section>
+
+    <section id="staff-dashboard" class="hidden">
+      <div class="metric-grid">
+        <article class="metric-card"><span>Étudiants actifs</span><strong id="metric-students">—</strong><small>Dossiers en cours</small></article>
+        <article class="metric-card"><span>Candidatures en attente</span><strong id="metric-candidates">—</strong><small>À traiter</small></article>
+        <article class="metric-card"><span>Unités d’enseignement</span><strong id="metric-ues">—</strong><small>Catalogue pédagogique</small></article>
+        <article class="metric-card"><span>Notes saisies</span><strong id="metric-grades">—</strong><small>Contrôles et examens</small></article>
+      </div>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Admissions</p><h2>Candidatures récentes</h2></div>
+          <button class="button button-secondary" id="refresh-candidates" type="button">Actualiser</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Candidat</th><th>Filière</th><th>Niveau</th><th>Année</th><th>Statut</th><th>Action</th></tr></thead>
+          <tbody id="candidate-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Scolarité</p><h2>Étudiants</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Numéro</th><th>Nom</th><th>Filière</th><th>Niveau</th><th>Statut</th></tr></thead>
+          <tbody id="student-rows"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Dossiers</p><h2>Créer un dossier étudiant</h2></div></div>
+        <form id="student-form" class="grade-form">
+          <div><label for="student-number">Numéro étudiant</label><input id="student-number" required maxlength="30" placeholder="SIG-2026-003"></div>
+          <div><label for="student-program">Filière</label><select id="student-program" required><option value="">Chargement…</option></select></div>
+          <div><label for="student-level">Niveau</label><select id="student-level" required><option>L1</option><option>L2</option><option>L3</option><option>M1</option><option>M2</option></select></div>
+          <div><label for="student-year">Année académique</label><input id="student-year" required pattern="[0-9]{4}-[0-9]{4}" value="2026-2027"></div>
+          <button class="button button-primary" type="submit">Créer le dossier</button>
+        </form>
+        <p class="feedback" id="student-feedback" role="status" aria-live="polite"></p>
+      </section>
+      <section class="panel" id="grade-panel">
+        <div class="section-heading"><div><p class="eyebrow">Évaluations</p><h2>Saisie des notes</h2></div></div>
+        <form id="grade-form" class="grade-form">
+          <div><label for="grade-student">Étudiant</label><select id="grade-student" required><option value="">Choisir</option></select></div>
+          <div><label for="grade-course">Unité d’enseignement</label><select id="grade-course" required disabled><option value="">Choisir un étudiant</option></select></div>
+          <div><label for="grade-type">Évaluation</label><select id="grade-type"><option value="CC">Contrôle continu</option><option value="EXAM">Examen</option></select></div>
+          <div><label for="grade-value">Note / 20</label><input id="grade-value" type="number" min="0" max="20" step="0.01" required></div>
+          <button class="button button-primary" type="submit">Enregistrer la note</button>
+        </form>
+        <p class="feedback" id="grade-feedback" role="status" aria-live="polite"></p>
+      </section>
+    </section>
+
+    <section id="student-dashboard" class="hidden">
+      <div class="metric-grid metric-grid-student">
+        <article class="metric-card"><span>Numéro étudiant</span><strong id="my-number">—</strong><small id="my-program">—</small></article>
+        <article class="metric-card"><span>Moyenne générale</span><strong id="my-average">—</strong><small>Pondérée par les ECTS</small></article>
+        <article class="metric-card"><span>ECTS validés</span><strong id="my-ects">—</strong><small id="my-ects-total">sur — ECTS</small></article>
+      </div>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Résultats</p><h2>Mon relevé de notes</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>UE</th><th>Semestre</th><th>ECTS</th><th>CC</th><th>Examen</th><th>Moyenne</th></tr></thead>
+          <tbody id="transcript-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+      </section>
+    </section>
+    <p class="feedback page-feedback" id="page-feedback" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153a62">
+  <title>Candidature | SIGIS</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="auth-page min-h-screen px-4 py-7">
+  <main class="auth-card admission-card mx-auto w-full">
+    <a class="brand brand-center" href="/"><span class="brand-mark">S</span><span>SIGIS</span></a>
+    <p class="eyebrow">Admissions</p>
+    <h1>Déposer une candidature</h1>
+    <p class="muted">Complétez le formulaire. Après acceptation par la scolarité, votre dossier étudiant sera créé.</p>
+    <form id="admission-form" class="stack">
+      <div class="form-grid">
+        <div><label for="prenom">Prénom</label><input id="prenom" name="prenom" required maxlength="100"></div>
+        <div><label for="nom">Nom</label><input id="nom" name="nom" required maxlength="100"></div>
+      </div>
+      <label for="candidate-email">Adresse email</label>
+      <input id="candidate-email" name="email" type="email" required maxlength="254">
+      <label for="telephone">Téléphone (facultatif)</label>
+      <input id="telephone" name="telephone" type="tel" maxlength="30">
+      <label for="date_naissance">Date de naissance (facultatif)</label>
+      <input id="date_naissance" name="date_naissance" type="date">
+      <label for="filiere_id">Filière souhaitée</label>
+      <select id="filiere_id" name="filiere_id" required><option value="">Chargement…</option></select>
+      <div class="form-grid">
+        <div><label for="niveau_souhaite">Niveau souhaité</label>
+          <select id="niveau_souhaite" name="niveau_souhaite" required>
+            <option value="">Choisir</option><option>L1</option><option>L2</option><option>L3</option><option>M1</option><option>M2</option>
+          </select>
+        </div>
+        <div><label for="annee_academique">Année académique</label>
+          <input id="annee_academique" name="annee_academique" value="2026-2027" required pattern="[0-9]{4}-[0-9]{4}">
+        </div>
+      </div>
+      <button class="button button-primary button-wide" type="submit">Envoyer ma candidature</button>
+      <p class="feedback" id="admission-feedback" role="status" aria-live="polite"></p>
+    </form>
+    <div class="auth-footer"><a href="/">Retour à la connexion</a></div>
+  </main>
+</body>
+</html>
