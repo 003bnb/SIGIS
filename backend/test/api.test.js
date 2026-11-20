@@ -5,6 +5,7 @@ const db = require('../src/config/db');
 
 const apiBaseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:3000/api';
 const candidateIds = [];
+const testStudentIds = [];
 
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
@@ -29,6 +30,9 @@ async function login(email) {
 
 test('admission acceptance creates one student file and role access stays scoped', async (t) => {
   t.after(async () => {
+    if (testStudentIds.length) {
+      await db.query('DELETE FROM etudiants WHERE id = ANY($1::bigint[])', [testStudentIds]);
+    }
     if (candidateIds.length) {
       await db.query('DELETE FROM etudiants WHERE candidat_id = ANY($1::bigint[])', [candidateIds]);
       await db.query('DELETE FROM candidats WHERE id = ANY($1::bigint[])', [candidateIds]);
@@ -119,6 +123,43 @@ test('admission acceptance creates one student file and role access stays scoped
   });
   assert.equal(ownTranscript.status, 200);
   assert.equal(ownTranscript.payload.summary.average, 15.04);
+
+  const testCourses = await db.query(
+    'SELECT id, filiere_id FROM unites_enseignement ORDER BY id LIMIT 2'
+  );
+  assert.equal(testCourses.rowCount, 2, 'seed data should include at least two courses');
+  const testStudent = await db.query(
+    `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
+     VALUES ($1, $2, 'L2', '2026-2027')
+     RETURNING id`,
+    [`SIG-T-${randomUUID().slice(0, 20)}`, testCourses.rows[0].filiere_id]
+  );
+  const testStudentId = testStudent.rows[0].id;
+  testStudentIds.push(testStudentId);
+
+  const registrations = [];
+  for (const course of testCourses.rows) {
+    const registration = await db.query(
+      `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique)
+       VALUES ($1, $2, '2026-2027')
+       RETURNING id`,
+      [testStudentId, course.id]
+    );
+    registrations.push(registration.rows[0].id);
+  }
+  await db.query(
+    `INSERT INTO notes (inscription_ue_id, type_evaluation, note)
+     VALUES ($1, 'CC', 14)`,
+    [registrations[0]]
+  );
+  const incompleteTranscript = await request(
+    `/notes/student/${testStudentId}/transcript`,
+    { token: adminToken }
+  );
+  assert.equal(incompleteTranscript.status, 200);
+  assert.equal(incompleteTranscript.payload.courses[0].average, 14);
+  assert.equal(incompleteTranscript.payload.courses[1].average, null);
+  assert.equal(incompleteTranscript.payload.summary.average, null);
 
   const forbiddenTranscript = await request(`/notes/student/${accepted.payload.student.id}/transcript`, {
     token: studentUser.token

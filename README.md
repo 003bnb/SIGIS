@@ -77,7 +77,7 @@ Ces comptes et mots de passe sont réservés au développement local. Désactive
 - Tableau de bord : effectifs actifs, candidatures en attente, UE et notes saisies.
 - Création et consultation des dossiers étudiants.
 - Saisie et mise à jour des notes de contrôle continu (`CC`) et d’examen (`EXAM`).
-- Relevé de notes avec moyenne d’UE `CC × 40 % + examen × 60 %` (une note disponible est affichée seule), puis moyenne générale pondérée par les ECTS. Une UE est validée à partir de 10/20.
+- Relevé de notes avec moyenne d’UE `CC × 40 % + examen × 60 %` (une note disponible est affichée seule), puis moyenne générale pondérée uniquement par les ECTS. Le coefficient de l’UE n’intervient pas dans ce calcul. La moyenne générale reste indisponible tant qu’une UE inscrite n’a aucune note. Une UE est validée à partir de 10/20.
 
 Le calcul s’effectue sur les inscriptions de l’année académique active du dossier étudiant. La pondération CC/examen est une règle de démonstration et doit être validée par l’établissement avant l’usage officiel. L’acceptation d’une candidature crée le dossier administratif, mais pas de compte de connexion étudiant : celui-ci doit être créé séparément.
 

@@ -84,7 +84,7 @@ async function transcript(req, res, next) {
     const ectsValidated = gradedCourses.reduce(
       (sum, course) => sum + (course.average >= 10 ? course.ects : 0), 0
     );
-    const weightedAverage = gradedCourses.length
+    const weightedAverage = gradedCourses.length && courses.every((course) => course.average !== null)
       ? gradedCourses.reduce((sum, course) => sum + course.average * course.ects, 0) /
         gradedCourses.reduce((sum, course) => sum + course.ects, 0)
       : null;
@@ -97,7 +97,7 @@ async function transcript(req, res, next) {
         ects_total: ectsTotal,
         ects_validated: ectsValidated
       },
-      calculation: 'Moyenne UE : CC × 40 % + examen × 60 % (ou note disponible). Moyenne générale pondérée par les ECTS.'
+      calculation: 'Moyenne UE : CC × 40 % + examen × 60 % (ou note disponible). Moyenne générale pondérée par les ECTS, calculée uniquement lorsque chaque UE a au moins une note.'
     });
   } catch (error) {
     return next(error);
