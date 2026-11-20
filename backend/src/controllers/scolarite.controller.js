@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isValidAcademicYear, isValidLevel } = require('../validation/academic');
 
 async function dashboard(req, res, next) {
   try {
@@ -35,6 +36,12 @@ async function createStudent(req, res, next) {
   const { numero_etudiant, utilisateur_id, filiere_id, niveau, annee_academique } = req.body || {};
   if (![numero_etudiant, filiere_id, niveau, annee_academique].every((value) => String(value || '').trim())) {
     return res.status(400).json({ error: 'Numéro étudiant, filière, niveau et année académique sont obligatoires.' });
+  }
+  if (!isValidLevel(niveau)) {
+    return res.status(400).json({ error: 'Niveau invalide. Valeurs autorisées : L1, L2, L3, M1, M2.' });
+  }
+  if (!isValidAcademicYear(annee_academique)) {
+    return res.status(400).json({ error: 'Année académique invalide. Format attendu : YYYY-YYYY avec deux années consécutives.' });
   }
   try {
     const { rows } = await db.query(
@@ -75,11 +82,11 @@ async function updateStudent(req, res, next) {
   if (statut !== undefined && !['ACTIF', 'SUSPENDU', 'DIPLOME', 'RADIE'].includes(statut)) {
     return res.status(400).json({ error: 'Statut étudiant invalide.' });
   }
-  if (niveau !== undefined && !String(niveau).trim()) {
-    return res.status(400).json({ error: 'Le niveau ne peut pas être vide.' });
+  if (niveau !== undefined && !isValidLevel(niveau)) {
+    return res.status(400).json({ error: 'Niveau invalide. Valeurs autorisées : L1, L2, L3, M1, M2.' });
   }
-  if (annee_academique !== undefined && !String(annee_academique).trim()) {
-    return res.status(400).json({ error: 'L’année académique ne peut pas être vide.' });
+  if (annee_academique !== undefined && !isValidAcademicYear(annee_academique)) {
+    return res.status(400).json({ error: 'Année académique invalide. Format attendu : YYYY-YYYY avec deux années consécutives.' });
   }
   try {
     const { rows } = await db.query(

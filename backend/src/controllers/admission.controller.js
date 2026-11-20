@@ -1,10 +1,17 @@
 const db = require('../config/db');
+const { isValidAcademicYear, isValidLevel } = require('../validation/academic');
 
 async function createCandidate(req, res, next) {
   const { nom, prenom, email, telephone, date_naissance, filiere_id, niveau_souhaite, annee_academique } = req.body || {};
   if (![nom, prenom, email, filiere_id, niveau_souhaite, annee_academique]
     .every((value) => String(value || '').trim())) {
     return res.status(400).json({ error: 'Nom, prénom, email, filière, niveau et année académique sont obligatoires.' });
+  }
+  if (!isValidLevel(niveau_souhaite)) {
+    return res.status(400).json({ error: 'Niveau invalide. Valeurs autorisées : L1, L2, L3, M1, M2.' });
+  }
+  if (!isValidAcademicYear(annee_academique)) {
+    return res.status(400).json({ error: 'Année académique invalide. Format attendu : YYYY-YYYY avec deux années consécutives.' });
   }
   if (!Number.isInteger(Number(filiere_id)) || Number(filiere_id) < 1) {
     return res.status(400).json({ error: 'Filière invalide.' });

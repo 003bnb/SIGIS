@@ -49,7 +49,13 @@ docker compose ps
 Ouvrez [http://localhost:8080](http://localhost:8080). L’API est disponible à `http://localhost:8080/api`; son contrôle de santé est `GET /api/health`.
 Les journaux se consultent avec `docker compose logs -f backend frontend db`.
 
-Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par PostgreSQL uniquement lors de l’initialisation d’un volume de données vierge. Pour injecter à nouveau les données de démonstration dans la base courante :
+Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par PostgreSQL uniquement lors de l’initialisation d’un volume de données vierge. Pour une base déjà initialisée, sauvegardez-la puis appliquez la migration de validation :
+
+```bash
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/001_academic_validation.sql
+```
+
+Cette migration refuse les données existantes qui ne respectent pas les règles. Corrigez-les avant de la relancer. Pour injecter à nouveau les données de démonstration dans la base courante :
 
 ```bash
 ./scripts/seed-db.sh
@@ -78,6 +84,7 @@ Ces comptes et mots de passe sont réservés au développement local. Désactive
 - Création et consultation des dossiers étudiants.
 - Saisie et mise à jour des notes de contrôle continu (`CC`) et d’examen (`EXAM`).
 - Relevé de notes avec moyenne d’UE `CC × 40 % + examen × 60 %` (une note disponible est affichée seule), puis moyenne générale pondérée uniquement par les ECTS. Le coefficient de l’UE n’intervient pas dans ce calcul. La moyenne générale reste indisponible tant qu’une UE inscrite n’a aucune note. Une UE est validée à partir de 10/20.
+- Niveaux autorisés : `L1`, `L2`, `L3`, `M1`, `M2`. Les années académiques suivent le format `YYYY-YYYY` avec deux années consécutives, et les semestres sont numérotés de 1 à 10.
 
 Le calcul s’effectue sur les inscriptions de l’année académique active du dossier étudiant. La pondération CC/examen est une règle de démonstration et doit être validée par l’établissement avant l’usage officiel. L’acceptation d’une candidature crée le dossier administratif, mais pas de compte de connexion étudiant : celui-ci doit être créé séparément.
 

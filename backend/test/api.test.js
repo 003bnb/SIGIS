@@ -61,6 +61,56 @@ test('admission acceptance creates one student file and role access stays scoped
   });
   assert.equal(missingProgram.status, 400);
 
+  const invalidCandidateLevel = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Test',
+      prenom: 'Niveau',
+      email: `test-${randomUUID()}@example.test`,
+      filiere_id: programId,
+      niveau_souhaite: 'D1',
+      annee_academique: '2026-2027'
+    }
+  });
+  assert.equal(invalidCandidateLevel.status, 400);
+
+  const invalidCandidateYear = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Test',
+      prenom: 'Année',
+      email: `test-${randomUUID()}@example.test`,
+      filiere_id: programId,
+      niveau_souhaite: 'L1',
+      annee_academique: '2026-2028'
+    }
+  });
+  assert.equal(invalidCandidateYear.status, 400);
+
+  const invalidStudentLevel = await request('/scolarite/students', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      numero_etudiant: `SIG-T-${randomUUID().slice(0, 20)}`,
+      filiere_id: programId,
+      niveau: 'D1',
+      annee_academique: '2026-2027'
+    }
+  });
+  assert.equal(invalidStudentLevel.status, 400);
+
+  const invalidStudentYear = await request('/scolarite/students', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      numero_etudiant: `SIG-T-${randomUUID().slice(0, 20)}`,
+      filiere_id: programId,
+      niveau: 'L1',
+      annee_academique: '2026-2028'
+    }
+  });
+  assert.equal(invalidStudentYear.status, 400);
+
   const email = `test-${randomUUID()}@example.test`;
   const created = await request('/admission', {
     method: 'POST',
@@ -128,6 +178,42 @@ test('admission acceptance creates one student file and role access stays scoped
     'SELECT id, filiere_id FROM unites_enseignement ORDER BY id LIMIT 2'
   );
   assert.equal(testCourses.rowCount, 2, 'seed data should include at least two courses');
+
+  const invalidDatabaseInserts = [
+    () => db.query(
+      `INSERT INTO candidats (nom, prenom, email, filiere_id, niveau_souhaite, annee_academique)
+       VALUES ('Test', 'Niveau', $1, $2, 'D1', '2026-2027')`,
+      [`test-${randomUUID()}@example.test`, testCourses.rows[0].filiere_id]
+    ),
+    () => db.query(
+      `INSERT INTO candidats (nom, prenom, email, filiere_id, niveau_souhaite, annee_academique)
+       VALUES ('Test', 'Année', $1, $2, 'L1', '2026-2028')`,
+      [`test-${randomUUID()}@example.test`, testCourses.rows[0].filiere_id]
+    ),
+    () => db.query(
+      `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
+       VALUES ($1, $2, 'D1', '2026-2027')`,
+      [`SIG-T-${randomUUID().slice(0, 20)}`, testCourses.rows[0].filiere_id]
+    ),
+    () => db.query(
+      `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
+       VALUES ($1, $2, 'L1', '2026-2028')`,
+      [`SIG-T-${randomUUID().slice(0, 20)}`, testCourses.rows[0].filiere_id]
+    )
+  ];
+  for (const invalidInsert of invalidDatabaseInserts) {
+    await assert.rejects(invalidInsert(), (error) => error.code === '23514');
+  }
+
+  await assert.rejects(
+    db.query(
+      `INSERT INTO unites_enseignement (code, intitule, filiere_id, niveau, semestre, ects)
+       VALUES ($1, 'Semestre invalide', $2, 'L2', 11, 5)`,
+      [`UE-T-${randomUUID().slice(0, 20)}`, testCourses.rows[0].filiere_id]
+    ),
+    (error) => error.code === '23514'
+  );
+
   const testStudent = await db.query(
     `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
      VALUES ($1, $2, 'L2', '2026-2027')
@@ -136,6 +222,29 @@ test('admission acceptance creates one student file and role access stays scoped
   );
   const testStudentId = testStudent.rows[0].id;
   testStudentIds.push(testStudentId);
+
+  const invalidStudentUpdate = await request(`/scolarite/students/${testStudentId}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { niveau: 'D1' }
+  });
+  assert.equal(invalidStudentUpdate.status, 400);
+
+  const invalidStudentYearUpdate = await request(`/scolarite/students/${testStudentId}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { annee_academique: '2026-2028' }
+  });
+  assert.equal(invalidStudentYearUpdate.status, 400);
+
+  await assert.rejects(
+    db.query(
+      `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique)
+       VALUES ($1, $2, '2026-2028')`,
+      [testStudentId, testCourses.rows[0].id]
+    ),
+    (error) => error.code === '23514'
+  );
 
   const registrations = [];
   for (const course of testCourses.rows) {

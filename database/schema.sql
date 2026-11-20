@@ -25,8 +25,15 @@ CREATE TABLE IF NOT EXISTS candidats (
     telephone VARCHAR(30),
     date_naissance DATE,
     filiere_id BIGINT REFERENCES filieres(id) ON DELETE SET NULL,
-    niveau_souhaite VARCHAR(30) NOT NULL,
-    annee_academique VARCHAR(9) NOT NULL,
+    niveau_souhaite VARCHAR(30) NOT NULL CHECK (niveau_souhaite IN ('L1', 'L2', 'L3', 'M1', 'M2')),
+    annee_academique VARCHAR(9) NOT NULL CHECK (
+        CASE
+            WHEN annee_academique ~ '^[1-9][0-9]{3}-[1-9][0-9]{3}$' THEN
+                substring(annee_academique FROM 6 FOR 4)::integer =
+                substring(annee_academique FROM 1 FOR 4)::integer + 1
+            ELSE FALSE
+        END
+    ),
     statut VARCHAR(20) NOT NULL DEFAULT 'EN_ATTENTE'
         CHECK (statut IN ('EN_ATTENTE', 'ACCEPTE', 'REFUSE')),
     notes_admin TEXT,
@@ -43,8 +50,15 @@ CREATE TABLE IF NOT EXISTS etudiants (
     numero_etudiant VARCHAR(30) NOT NULL UNIQUE,
     candidat_id BIGINT UNIQUE REFERENCES candidats(id) ON DELETE SET NULL,
     filiere_id BIGINT NOT NULL REFERENCES filieres(id) ON DELETE RESTRICT,
-    niveau VARCHAR(30) NOT NULL,
-    annee_academique VARCHAR(9) NOT NULL,
+    niveau VARCHAR(30) NOT NULL CHECK (niveau IN ('L1', 'L2', 'L3', 'M1', 'M2')),
+    annee_academique VARCHAR(9) NOT NULL CHECK (
+        CASE
+            WHEN annee_academique ~ '^[1-9][0-9]{3}-[1-9][0-9]{3}$' THEN
+                substring(annee_academique FROM 6 FOR 4)::integer =
+                substring(annee_academique FROM 1 FOR 4)::integer + 1
+            ELSE FALSE
+        END
+    ),
     date_inscription DATE NOT NULL DEFAULT CURRENT_DATE,
     statut VARCHAR(20) NOT NULL DEFAULT 'ACTIF'
         CHECK (statut IN ('ACTIF', 'SUSPENDU', 'DIPLOME', 'RADIE')),
@@ -58,8 +72,8 @@ CREATE TABLE IF NOT EXISTS unites_enseignement (
     code VARCHAR(30) NOT NULL UNIQUE,
     intitule VARCHAR(180) NOT NULL,
     filiere_id BIGINT NOT NULL REFERENCES filieres(id) ON DELETE RESTRICT,
-    niveau VARCHAR(30) NOT NULL,
-    semestre SMALLINT NOT NULL CHECK (semestre BETWEEN 1 AND 12),
+    niveau VARCHAR(30) NOT NULL CHECK (niveau IN ('L1', 'L2', 'L3', 'M1', 'M2')),
+    semestre SMALLINT NOT NULL CHECK (semestre BETWEEN 1 AND 10),
     ects NUMERIC(4, 1) NOT NULL CHECK (ects > 0),
     coefficient NUMERIC(5, 2) NOT NULL DEFAULT 1 CHECK (coefficient > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -69,7 +83,14 @@ CREATE TABLE IF NOT EXISTS inscriptions_ue (
     id BIGSERIAL PRIMARY KEY,
     etudiant_id BIGINT NOT NULL REFERENCES etudiants(id) ON DELETE CASCADE,
     ue_id BIGINT NOT NULL REFERENCES unites_enseignement(id) ON DELETE RESTRICT,
-    annee_academique VARCHAR(9) NOT NULL,
+    annee_academique VARCHAR(9) NOT NULL CHECK (
+        CASE
+            WHEN annee_academique ~ '^[1-9][0-9]{3}-[1-9][0-9]{3}$' THEN
+                substring(annee_academique FROM 6 FOR 4)::integer =
+                substring(annee_academique FROM 1 FOR 4)::integer + 1
+            ELSE FALSE
+        END
+    ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (etudiant_id, ue_id, annee_academique)
 );
