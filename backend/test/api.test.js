@@ -2,21 +2,44 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { after, test } = require('node:test');
 const db = require('../src/config/db');
+const { getStoredPath, removeFile } = require('../src/middleware/candidate-document');
 
 const apiBaseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:3000/api';
 const candidateIds = [];
+const candidateDocumentKeys = [];
 const testStudentIds = [];
 
-async function request(path, { method = 'GET', body, token } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+async function request(path, { method = 'GET', body, file, token } = {}) {
+  const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
+  let requestBody;
+  if (file) {
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(body || {})) formData.append(key, value);
+    formData.append('diplome', new Blob([file.content], { type: file.type }), file.name);
+    requestBody = formData;
+  } else if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    requestBody = JSON.stringify(body);
+  }
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body)
+    body: requestBody
   });
   const payload = await response.json();
   return { status: response.status, payload };
+}
+
+async function download(path, token) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return {
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    content: Buffer.from(await response.arrayBuffer())
+  };
 }
 
 async function login(email) {
@@ -30,6 +53,9 @@ async function login(email) {
 
 test('admission acceptance creates one student file and role access stays scoped', async (t) => {
   t.after(async () => {
+    for (const storageKey of candidateDocumentKeys) {
+      await removeFile(getStoredPath(storageKey));
+    }
     if (testStudentIds.length) {
       await db.query('DELETE FROM etudiants WHERE id = ANY($1::bigint[])', [testStudentIds]);
     }
@@ -40,9 +66,10 @@ test('admission acceptance creates one student file and role access stays scoped
     await db.end();
   });
 
-  const [{ token: adminToken }, studentUser] = await Promise.all([
+  const [{ token: adminToken }, studentUser, { token: staffToken }] = await Promise.all([
     login('admin@sigis.local'),
-    login('etudiant@sigis.local')
+    login('etudiant@sigis.local'),
+    login('scolarite@sigis.local')
   ]);
   const programs = await request('/scolarite/programs');
   assert.equal(programs.status, 200);
@@ -112,6 +139,56 @@ test('admission acceptance creates one student file and role access stays scoped
   assert.equal(invalidStudentYear.status, 400);
 
   const email = `test-${randomUUID()}@example.test`;
+  const validDiploma = {
+    content: '%PDF-1.7\nSIGIS test diploma',
+    type: 'application/pdf',
+    name: 'diplome.pdf'
+  };
+  const missingDiploma = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Candidat',
+      prenom: 'SansPiece',
+      email: `test-${randomUUID()}@example.test`,
+      filiere_id: programId,
+      niveau_souhaite: 'L1',
+      annee_academique: '2026-2027'
+    }
+  });
+  assert.equal(missingDiploma.status, 400);
+
+  const invalidDiploma = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Candidat',
+      prenom: 'FichierInvalide',
+      email: `test-${randomUUID()}@example.test`,
+      filiere_id: programId,
+      niveau_souhaite: 'L1',
+      annee_academique: '2026-2027'
+    },
+    file: { content: 'not a pdf', type: 'application/pdf', name: 'fake.pdf' }
+  });
+  assert.equal(invalidDiploma.status, 400);
+
+  const oversizedDiploma = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Candidat',
+      prenom: 'FichierVolumineux',
+      email: `test-${randomUUID()}@example.test`,
+      filiere_id: programId,
+      niveau_souhaite: 'L1',
+      annee_academique: '2026-2027'
+    },
+    file: {
+      content: Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(5 * 1024 * 1024)]),
+      type: 'application/pdf',
+      name: 'volumineux.pdf'
+    }
+  });
+  assert.equal(oversizedDiploma.status, 413);
+
   const created = await request('/admission', {
     method: 'POST',
     body: {
@@ -121,11 +198,40 @@ test('admission acceptance creates one student file and role access stays scoped
       filiere_id: programId,
       niveau_souhaite: 'L1',
       annee_academique: '2026-2027'
-    }
+    },
+    file: validDiploma
   });
   assert.equal(created.status, 201);
   const candidateId = created.payload.candidate.id;
   candidateIds.push(candidateId);
+  const savedDocument = await db.query(
+    `SELECT storage_key FROM pieces_candidature
+     WHERE candidat_id = $1 AND type_document = 'DIPLOME'`,
+    [candidateId]
+  );
+  assert.equal(savedDocument.rowCount, 1);
+  candidateDocumentKeys.push(savedDocument.rows[0].storage_key);
+
+  const duplicate = await request('/admission', {
+    method: 'POST',
+    body: {
+      nom: 'Candidat',
+      prenom: 'Doublon',
+      email: email.toUpperCase(),
+      filiere_id: programId,
+      niveau_souhaite: 'L1',
+      annee_academique: '2026-2027'
+    },
+    file: validDiploma
+  });
+  assert.equal(duplicate.status, 409);
+
+  const adminDownload = await download(`/admission/${candidateId}/documents/diplome`, adminToken);
+  assert.equal(adminDownload.status, 200);
+  assert.match(adminDownload.contentType, /^application\/pdf/);
+  assert.equal(adminDownload.content.subarray(0, 5).toString(), '%PDF-');
+  const studentDownload = await download(`/admission/${candidateId}/documents/diplome`, studentUser.token);
+  assert.equal(studentDownload.status, 403);
 
   const studentAccess = await request('/admission', { token: studentUser.token });
   assert.equal(studentAccess.status, 403);
@@ -155,12 +261,42 @@ test('admission acceptance creates one student file and role access stays scoped
   assert.equal(acceptedAgain.payload.student.id, accepted.payload.student.id);
   assert.equal((await db.query('SELECT id FROM etudiants WHERE candidat_id = $1', [candidateId])).rowCount, 1);
 
-  const rejectedAfterAdmission = await request(`/admission/${candidateId}/status`, {
+  const refusalWithoutReason = await request(`/admission/${candidateId}/status`, {
     method: 'PATCH',
     token: adminToken,
     body: { statut: 'REFUSE' }
   });
-  assert.equal(rejectedAfterAdmission.status, 409);
+  assert.equal(refusalWithoutReason.status, 400);
+
+  const rejectedAfterAdmission = await request(`/admission/${candidateId}/status`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { statut: 'REFUSE', notes_admin: 'Admission corrigée par erreur.' }
+  });
+  assert.equal(rejectedAfterAdmission.status, 200);
+  assert.equal(rejectedAfterAdmission.payload.student.statut, 'RADIE');
+
+  const staffCorrection = await request(`/admission/${candidateId}/status`, {
+    method: 'PATCH',
+    token: staffToken,
+    body: { statut: 'EN_ATTENTE' }
+  });
+  assert.equal(staffCorrection.status, 403);
+
+  const reopened = await request(`/admission/${candidateId}/status`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { statut: 'EN_ATTENTE' }
+  });
+  assert.equal(reopened.status, 200);
+
+  const reaccepted = await request(`/admission/${candidateId}/status`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { statut: 'ACCEPTE' }
+  });
+  assert.equal(reaccepted.status, 200);
+  assert.equal(reaccepted.payload.student.statut, 'RADIE');
 
   const ownStudent = await db.query(
     `SELECT id FROM etudiants

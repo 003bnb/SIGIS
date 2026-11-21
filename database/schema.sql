@@ -43,6 +43,20 @@ CREATE TABLE IF NOT EXISTS candidats (
 
 CREATE INDEX IF NOT EXISTS idx_candidats_statut ON candidats(statut);
 CREATE INDEX IF NOT EXISTS idx_candidats_email ON candidats(email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_candidats_email_annee_unique
+    ON candidats(LOWER(email), annee_academique);
+
+CREATE TABLE IF NOT EXISTS pieces_candidature (
+    id BIGSERIAL PRIMARY KEY,
+    candidat_id BIGINT NOT NULL REFERENCES candidats(id) ON DELETE CASCADE,
+    type_document VARCHAR(30) NOT NULL CHECK (type_document = 'DIPLOME'),
+    storage_key UUID NOT NULL UNIQUE,
+    nom_original VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL CHECK (mime_type IN ('application/pdf', 'image/jpeg', 'image/png')),
+    taille_octets INTEGER NOT NULL CHECK (taille_octets BETWEEN 1 AND 5242880),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (candidat_id, type_document)
+);
 
 CREATE TABLE IF NOT EXISTS etudiants (
     id BIGSERIAL PRIMARY KEY,

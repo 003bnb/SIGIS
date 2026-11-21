@@ -2,7 +2,8 @@ const TOKEN_KEY = 'sigis_token';
 const USER_KEY = 'sigis_user';
 
 async function api(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const isFormData = options.body instanceof FormData;
+  const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`/api${path}`, { ...options, headers });
@@ -77,9 +78,8 @@ async function initAdmission() {
     event.preventDefault();
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
-    const data = Object.fromEntries(new FormData(form).entries());
     try {
-      const result = await api('/admission', { method: 'POST', body: JSON.stringify(data) });
+      const result = await api('/admission', { method: 'POST', body: new FormData(form) });
       form.reset();
       form.elements.annee_academique.value = '2026-2027';
       showFeedback(feedback, `Candidature envoyée (référence ${result.candidate.id}).`, 'success');
@@ -105,6 +105,7 @@ function statusLabel(status) {
 async function loadCandidates() {
   const body = document.querySelector('#candidate-rows');
   const { candidates } = await api('/admission');
+  const user = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
   body.innerHTML = candidates.length ? candidates.map((candidate) => {
     const className = candidate.statut === 'ACCEPTE' ? 'status-accepted' :
       candidate.statut === 'REFUSE' ? 'status-refused' : '';
@@ -113,16 +114,51 @@ async function loadCandidates() {
            <button class="button button-secondary" data-status="ACCEPTE" data-id="${candidate.id}">Accepter</button>
            <button class="button button-quiet" data-status="REFUSE" data-id="${candidate.id}">Refuser</button>
          </div>`
-      : candidate.numero_etudiant
-        ? `<span class="muted">Dossier ${escapeHtml(candidate.numero_etudiant)}</span>`
-        : '—';
+      : user.role === 'ADMIN'
+        ? `<div class="action-group">
+             ${candidate.statut !== 'EN_ATTENTE' ? `<button class="button button-quiet" data-status="EN_ATTENTE" data-id="${candidate.id}">Réouvrir</button>` : ''}
+             ${candidate.statut !== 'ACCEPTE' ? `<button class="button button-secondary" data-status="ACCEPTE" data-id="${candidate.id}">Accepter</button>` : ''}
+             ${candidate.statut !== 'REFUSE' ? `<button class="button button-quiet" data-status="REFUSE" data-id="${candidate.id}">Refuser</button>` : ''}
+           </div>`
+        : candidate.numero_etudiant
+          ? `<span class="muted">Dossier ${escapeHtml(candidate.numero_etudiant)}</span>`
+          : '—';
+    const diploma = candidate.diplome_nom
+      ? `<button class="button button-quiet" data-download-diploma="${candidate.id}">Télécharger</button>`
+      : '—';
     return `<tr>
       <td><strong>${escapeHtml(candidate.prenom)} ${escapeHtml(candidate.nom)}</strong><br><span class="muted">${escapeHtml(candidate.email)}</span></td>
       <td>${escapeHtml(candidate.filiere || '—')}</td><td>${escapeHtml(candidate.niveau_souhaite)}</td>
       <td>${escapeHtml(candidate.annee_academique)}</td>
-      <td><span class="status ${className}">${statusLabel(candidate.statut)}</span></td><td>${actions}</td>
+      <td><span class="status ${className}">${statusLabel(candidate.statut)}</span></td>
+      <td>${diploma}<br><span class="muted">${escapeHtml(candidate.diplome_nom || '')}</span></td>
+      <td>${escapeHtml(candidate.notes_admin || '—')}</td><td>${actions}</td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6" class="muted">Aucune candidature.</td></tr>';
+  }).join('') : '<tr><td colspan="8" class="muted">Aucune candidature.</td></tr>';
+}
+
+async function downloadCandidateDiploma(candidateId) {
+  const headers = {};
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`/api/admission/${encodeURIComponent(candidateId)}/documents/diplome`, { headers });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      location.href = '/';
+    }
+    throw new Error(data.error || `Erreur HTTP ${response.status}`);
+  }
+  const blob = await response.blob();
+  const extension = ({ 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' })[blob.type] || 'bin';
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `diplome-${candidateId}.${extension}`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 async function loadStudents() {
@@ -219,17 +255,42 @@ async function initDashboard() {
   });
   document.querySelector('#candidate-rows').addEventListener('click', async (event) => {
     const button = event.target.closest('button[data-status]');
+    const downloadButton = event.target.closest('button[data-download-diploma]');
+    if (downloadButton) {
+      downloadButton.disabled = true;
+      try {
+        await downloadCandidateDiploma(downloadButton.dataset.downloadDiploma);
+      } catch (error) {
+        showFeedback(feedback, error.message, 'error');
+      } finally {
+        downloadButton.disabled = false;
+      }
+      return;
+    }
     if (!button) return;
     button.disabled = true;
     try {
+      const payload = { statut: button.dataset.status };
+      if (payload.statut === 'REFUSE') {
+        const reason = window.prompt('Motif obligatoire du refus :');
+        if (reason === null) {
+          button.disabled = false;
+          return;
+        }
+        if (!reason.trim()) throw new Error('Un motif est obligatoire pour refuser une candidature.');
+        payload.notes_admin = reason.trim();
+      }
       const result = await api(`/admission/${button.dataset.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ statut: button.dataset.status })
+        body: JSON.stringify(payload)
       });
       await loadCandidates();
-      if (result.student) {
-        showFeedback(feedback, `Candidature acceptée. Dossier étudiant créé : ${result.student.numero_etudiant}.`, 'success');
-      }
+      const message = result.student?.statut === 'RADIE'
+        ? `Candidature mise à jour. Le dossier ${result.student.numero_etudiant} reste radié; sa réactivation doit être faite séparément.`
+        : result.student && payload.statut === 'ACCEPTE'
+          ? `Candidature acceptée. Dossier étudiant : ${result.student.numero_etudiant}.`
+          : `Statut de la candidature mis à jour : ${statusLabel(result.candidate.statut)}.`;
+      showFeedback(feedback, message, 'success');
       const { indicators } = await api('/scolarite/dashboard');
       document.querySelector('#metric-candidates').textContent = formatNumber(indicators.candidatures_en_attente);
     } catch (error) {

@@ -49,13 +49,14 @@ docker compose ps
 Ouvrez [http://localhost:8080](http://localhost:8080). L’API est disponible à `http://localhost:8080/api`; son contrôle de santé est `GET /api/health`.
 Les journaux se consultent avec `docker compose logs -f backend frontend db`.
 
-Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par PostgreSQL uniquement lors de l’initialisation d’un volume de données vierge. Pour une base déjà initialisée, sauvegardez-la puis appliquez la migration de validation :
+Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par PostgreSQL uniquement lors de l’initialisation d’un volume de données vierge. Pour une base déjà initialisée, sauvegardez-la puis appliquez une seule fois les migrations dans l’ordre :
 
 ```bash
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/001_academic_validation.sql
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/002_admission_workflow.sql
 ```
 
-Cette migration refuse les données existantes qui ne respectent pas les règles. Corrigez-les avant de la relancer. Pour injecter à nouveau les données de démonstration dans la base courante :
+Les migrations refusent les données existantes qui ne respectent pas les contraintes (notamment les doublons email/année). Corrigez-les avant de les appliquer. Pour injecter à nouveau les données de démonstration dans la base courante :
 
 ```bash
 ./scripts/seed-db.sh
@@ -79,7 +80,7 @@ Ces comptes et mots de passe sont réservés au développement local. Désactive
 
 - Authentification par email et mot de passe, jeton JWT expirant par défaut après 8 heures.
 - Rôles `ADMIN`, `SCOLARITE` et `ETUDIANT`. Les actions de gestion et la saisie des notes sont limitées à l’administration et à la scolarité ; un étudiant ne consulte que son relevé.
-- Dépôt public d’une candidature avec filière obligatoire ; consultation et traitement par le personnel habilité. Une acceptation crée atomiquement un dossier étudiant et son numéro `SIG-<année>-<id>` ; l’opération est idempotente.
+- Dépôt public d’une candidature avec dernier diplôme obligatoire (PDF/JPEG/PNG, 5 Mo maximum), unicité de l’email par année académique, consultation des pièces réservée au personnel habilité et motif obligatoire en cas de refus. Une acceptation crée atomiquement un dossier étudiant et son numéro `SIG-<année>-<id>` ; l’opération est idempotente. Seul un administrateur peut corriger une décision déjà prise; une candidature acceptée corrigée vers un autre statut conserve son dossier, marqué `RADIE`.
 - Tableau de bord : effectifs actifs, candidatures en attente, UE et notes saisies.
 - Création et consultation des dossiers étudiants.
 - Saisie et mise à jour des notes de contrôle continu (`CC`) et d’examen (`EXAM`).
@@ -97,9 +98,10 @@ Toutes les réponses sont en JSON. Les routes protégées prennent `Authorizatio
 | `POST` | `/api/auth/login` | Public | Connexion et création du JWT |
 | `GET` | `/api/auth/me` | Authentifié | Profil de l’utilisateur connecté |
 | `GET` | `/api/scolarite/programs` | Public | Liste des filières |
-| `POST` | `/api/admission` | Public | Déposer une candidature |
+| `POST` | `/api/admission` | Public | Déposer une candidature en `multipart/form-data` avec le champ fichier obligatoire `diplome` |
 | `GET` | `/api/admission` | Admin, Scolarité | Lister les candidatures |
-| `PATCH` | `/api/admission/:id/status` | Admin, Scolarité | Modifier le statut ; l’acceptation crée aussi le dossier étudiant |
+| `GET` | `/api/admission/:id/documents/diplome` | Admin, Scolarité | Télécharger le diplôme |
+| `PATCH` | `/api/admission/:id/status` | Admin, Scolarité en attente; Admin pour corriger | Décider d’une candidature en attente; motif obligatoire pour un refus |
 | `GET` | `/api/scolarite/dashboard` | Admin, Scolarité | Indicateurs du tableau de bord |
 | `GET` | `/api/scolarite/students` | Admin, Scolarité | Lister les dossiers étudiants |
 | `POST` | `/api/scolarite/students` | Admin, Scolarité | Créer un dossier étudiant |
@@ -111,7 +113,7 @@ Toutes les réponses sont en JSON. Les routes protégées prennent `Authorizatio
 
 ## Sauvegarde et restauration
 
-Une sauvegarde au format PostgreSQL custom est créée dans `backups/` :
+Une sauvegarde de la base PostgreSQL et une archive des pièces jointes sont créées dans `backups/`. Les deux fichiers doivent être conservés ensemble :
 
 ```bash
 ./scripts/backup.sh
@@ -125,7 +127,7 @@ Restaurez un dump après confirmation interactive :
 ./scripts/restore.sh backups/sigis_20261109_120000.dump
 ```
 
-La restauration remplace les objets de la base portant les mêmes noms. Stockez les sauvegardes hors du serveur de l’application et testez périodiquement leur restauration.
+La restauration remplace les objets de la base portant les mêmes noms et restaure les pièces jointes associées. Stockez les deux fichiers hors du serveur de l’application et testez périodiquement leur restauration.
 
 ## Tests
 

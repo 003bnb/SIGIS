@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 node_modules/
+backend/storage/
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*

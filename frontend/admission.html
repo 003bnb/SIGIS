@@ -37,6 +37,8 @@
           <input id="annee_academique" name="annee_academique" value="2026-2027" required pattern="[0-9]{4}-[0-9]{4}">
         </div>
       </div>
+      <label for="diplome">Dernier diplôme (PDF, JPEG ou PNG, 5 Mo maximum)</label>
+      <input id="diplome" name="diplome" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required>
       <button class="button button-primary button-wide" type="submit">Envoyer ma candidature</button>
       <p class="feedback" id="admission-feedback" role="status" aria-live="polite"></p>
     </form>
