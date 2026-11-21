@@ -192,6 +192,17 @@ Répartition initiale proposée pour l’onboarding, à ajuster selon les compé
 
 Pour toute contribution : créer une branche dédiée, documenter les changements de schéma, vérifier les rôles et les entrées de l’API, puis valider le parcours concerné sur Docker Compose avant revue.
 
+## Règles métier à préciser
+
+Certaines règles académiques ne sont pas encore spécifiées formellement et ne sont **pas inventées** dans l’implémentation actuelle (seules des validations techniques sûres sont appliquées : formats, plages, contraintes d’intégrité, contrôles d’accès, calculs de notes explicitement définis). À valider et implémenter avec le référent métier :
+
+- **Passage / validation** : conditions de validation d’une UE, d’un semestre ou d’une année (seuils, compensation, ECTS requis, mentions).
+- **Redoublement** : critères, conservation des crédits/notes, nombre de tentatives, impact sur les inscriptions et le statut étudiant.
+- **Jury / décisions académiques** : processus, rôles, traçabilité des délibérations, décisions exceptionnelles et recours.
+- **Parcours et inscriptions** : prérequis/co-requis entre UE, règles d’inscription par niveau/semestre/filière, capacité, périodes d’inscription.
+- **Notes et évaluations** : barèmes particuliers, sessions de rattrapage, absence/dispense, arrondis officiels et verrouillage après validation.
+- **Dossiers et comptes** : cycle de vie complet des comptes (invitation/activation/réinitialisation), pièces complémentaires exigibles, conservation/archivage des données (RGPD/réglementation locale).
+
 ## Limites avant production
 
 Cette base constitue un socle de démarrage, pas un déploiement institutionnel prêt à accueillir des données réelles. Avant production, prévoir notamment TLS derrière un reverse proxy, secrets gérés hors dépôt, politique de rotation des clés, sauvegardes externalisées, migrations contrôlées, journalisation/audit, tests automatisés, gestion des comptes et réinitialisation de mot de passe, conformité aux règles locales de protection des données, et validation formelle du calcul des notes. Les données seed sont fictives.
