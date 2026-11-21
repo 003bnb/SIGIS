@@ -9,6 +9,8 @@ const candidateIds = [];
 const candidateDocumentKeys = [];
 const testStudentIds = [];
 const testUserIds = [];
+const testCourseIds = [];
+const testEnrollmentIds = [];
 
 async function request(path, { method = 'GET', body, file, token } = {}) {
   const headers = {};
@@ -28,7 +30,14 @@ async function request(path, { method = 'GET', body, file, token } = {}) {
     headers,
     body: requestBody
   });
-  const payload = await response.json();
+  const contentType = response.headers.get('content-type') || '';
+  let payload = null;
+  if (response.status !== 204 && contentType.includes('application/json')) {
+    payload = await response.json();
+  } else if (response.status !== 204) {
+    const text = await response.text();
+    payload = text ? { text } : null;
+  }
   return { status: response.status, payload };
 }
 
@@ -56,6 +65,12 @@ test('admission acceptance creates one student file and role access stays scoped
   t.after(async () => {
     for (const storageKey of candidateDocumentKeys) {
       await removeFile(getStoredPath(storageKey));
+    }
+    if (testEnrollmentIds.length) {
+      await db.query('DELETE FROM inscriptions_ue WHERE id = ANY($1::bigint[])', [testEnrollmentIds]);
+    }
+    if (testCourseIds.length) {
+      await db.query('DELETE FROM unites_enseignement WHERE id = ANY($1::bigint[])', [testCourseIds]);
     }
     if (testUserIds.length) {
       await db.query('UPDATE etudiants SET utilisateur_id = NULL WHERE utilisateur_id = ANY($1::bigint[])', [testUserIds]);
@@ -483,4 +498,78 @@ test('admission acceptance creates one student file and role access stays scoped
   });
   assert.equal(deactivated.status, 200);
   assert.equal(deactivated.payload.user.actif, false);
+
+  const coursesForStudent = await request('/scolarite/courses', { token: studentUser.token });
+  assert.equal(coursesForStudent.status, 200);
+  assert.ok(Array.isArray(coursesForStudent.payload.courses));
+
+  const createdCourse = await request('/scolarite/courses', {
+    method: 'POST',
+    token: staffToken,
+    body: {
+      code: `UE-TASK-${randomUUID().slice(0, 8)}`,
+      intitule: 'UE de test gestion',
+      filiere_id: programId,
+      niveau: 'L2',
+      semestre: 4,
+      ects: 3,
+      coefficient: 1
+    }
+  });
+  assert.equal(createdCourse.status, 201);
+  const createdCourseId = createdCourse.payload.course.id;
+  testCourseIds.push(createdCourseId);
+
+  const updatedCourse = await request(`/scolarite/courses/${createdCourseId}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { intitule: 'UE de test gestion mise à jour', semestre: 5 }
+  });
+  assert.equal(updatedCourse.status, 200);
+  assert.equal(updatedCourse.payload.course.semestre, 5);
+
+  const forbiddenCourseCreate = await request('/scolarite/courses', {
+    method: 'POST',
+    token: studentUser.token,
+    body: {
+      code: `UE-NO-${randomUUID().slice(0, 8)}`,
+      intitule: 'Interdit',
+      filiere_id: programId,
+      niveau: 'L2',
+      semestre: 4,
+      ects: 3
+    }
+  });
+  assert.equal(forbiddenCourseCreate.status, 403);
+
+  const createdEnrollment = await request('/scolarite/enrollments', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      etudiant_id: testStudentId,
+      ue_id: createdCourseId,
+      annee_academique: '2026-2027'
+    }
+  });
+  assert.equal(createdEnrollment.status, 201);
+  const createdEnrollmentId = createdEnrollment.payload.enrollment.id;
+  testEnrollmentIds.push(createdEnrollmentId);
+
+  const listedEnrollments = await request(
+    `/scolarite/enrollments?etudiant_id=${testStudentId}&annee_academique=2026-2027`,
+    { token: staffToken }
+  );
+  assert.equal(listedEnrollments.status, 200);
+  assert.ok(listedEnrollments.payload.enrollments.some((entry) => entry.id === createdEnrollmentId));
+
+  const myEnrollments = await request('/scolarite/me/enrollments', { token: studentUser.token });
+  assert.equal(myEnrollments.status, 200);
+  assert.ok(Array.isArray(myEnrollments.payload.enrollments));
+
+  const deletedEnrollment = await request(`/scolarite/enrollments/${createdEnrollmentId}`, {
+    method: 'DELETE',
+    token: adminToken
+  });
+  assert.equal(deletedEnrollment.status, 204);
+  testEnrollmentIds.splice(testEnrollmentIds.indexOf(createdEnrollmentId), 1);
 });

@@ -111,6 +111,13 @@ Toutes les réponses sont en JSON. Les routes protégées prennent `Authorizatio
 | `GET` | `/api/scolarite/students/:id` | Admin, Scolarité | Consulter un dossier |
 | `PATCH` | `/api/scolarite/students/:id` | Admin, Scolarité | Mettre à jour la filière, le niveau, l’année ou le statut |
 | `GET` | `/api/scolarite/me/student` | Authentifié | Dossier associé au compte connecté |
+| `GET` | `/api/scolarite/courses` | Admin, Scolarité, Étudiant | Lister les unités d’enseignement (filtres `filiere_id`, `niveau`, `semestre`) |
+| `POST` | `/api/scolarite/courses` | Admin, Scolarité | Créer une unité d’enseignement |
+| `PATCH` | `/api/scolarite/courses/:id` | Admin, Scolarité | Modifier une unité d’enseignement |
+| `GET` | `/api/scolarite/enrollments` | Admin, Scolarité | Lister les inscriptions aux UE (filtres `etudiant_id`, `annee_academique`) |
+| `GET` | `/api/scolarite/me/enrollments` | Authentifié (étudiant) | Lister les inscriptions du dossier associé au compte connecté |
+| `POST` | `/api/scolarite/enrollments` | Admin, Scolarité | Inscrire un étudiant à une UE |
+| `DELETE` | `/api/scolarite/enrollments/:id` | Admin, Scolarité | Supprimer une inscription à une UE |
 | `POST` | `/api/notes` | Admin, Scolarité | Créer ou mettre à jour une note |
 | `GET` | `/api/notes/student/:studentId/transcript` | Admin, Scolarité, étudiant propriétaire | Relevé et agrégats ECTS |
 
