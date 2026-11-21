@@ -97,6 +97,9 @@ Toutes les réponses sont en JSON. Les routes protégées prennent `Authorizatio
 |---|---|---|---|
 | `POST` | `/api/auth/login` | Public | Connexion et création du JWT |
 | `GET` | `/api/auth/me` | Authentifié | Profil de l’utilisateur connecté |
+| `GET` | `/api/users` | Admin | Lister les comptes utilisateurs |
+| `POST` | `/api/users` | Admin | Créer un compte (mot de passe ≥ 8 caractères) |
+| `PATCH` | `/api/users/:id` | Admin | Modifier, activer/désactiver, réinitialiser le mot de passe ou lier/délier un dossier étudiant (`etudiant_id`) |
 | `GET` | `/api/scolarite/programs` | Public | Liste des filières |
 | `POST` | `/api/admission` | Public | Déposer une candidature en `multipart/form-data` avec le champ fichier obligatoire `diplome` |
 | `GET` | `/api/admission` | Admin, Scolarité | Lister les candidatures |

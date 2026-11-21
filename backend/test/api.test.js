@@ -8,6 +8,7 @@ const apiBaseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:3000/api';
 const candidateIds = [];
 const candidateDocumentKeys = [];
 const testStudentIds = [];
+const testUserIds = [];
 
 async function request(path, { method = 'GET', body, file, token } = {}) {
   const headers = {};
@@ -55,6 +56,10 @@ test('admission acceptance creates one student file and role access stays scoped
   t.after(async () => {
     for (const storageKey of candidateDocumentKeys) {
       await removeFile(getStoredPath(storageKey));
+    }
+    if (testUserIds.length) {
+      await db.query('UPDATE etudiants SET utilisateur_id = NULL WHERE utilisateur_id = ANY($1::bigint[])', [testUserIds]);
+      await db.query('DELETE FROM utilisateurs WHERE id = ANY($1::bigint[])', [testUserIds]);
     }
     if (testStudentIds.length) {
       await db.query('DELETE FROM etudiants WHERE id = ANY($1::bigint[])', [testStudentIds]);
@@ -410,4 +415,72 @@ test('admission acceptance creates one student file and role access stays scoped
     token: studentUser.token
   });
   assert.equal(forbiddenTranscript.status, 403);
+
+  const usersAccess = await request('/users', { token: staffToken });
+  assert.equal(usersAccess.status, 403);
+
+  const createdUser = await request('/users', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nom_complet: 'Compte Test',
+      email: `test-user-${randomUUID()}@example.test`,
+      password: 'Password123!',
+      role: 'ETUDIANT'
+    }
+  });
+  assert.equal(createdUser.status, 201);
+  assert.equal(createdUser.payload.user.role, 'ETUDIANT');
+  testUserIds.push(createdUser.payload.user.id);
+
+  const duplicateUser = await request('/users', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      nom_complet: 'Compte Test Doublon',
+      email: createdUser.payload.user.email,
+      password: 'Password123!',
+      role: 'ETUDIANT'
+    }
+  });
+  assert.equal(duplicateUser.status, 409);
+
+  const listedUsers = await request('/users', { token: adminToken });
+  assert.equal(listedUsers.status, 200);
+  assert.ok(listedUsers.payload.users.some((user) => user.id === createdUser.payload.user.id));
+
+  const linkedStudent = await db.query(
+    `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
+     VALUES ($1, $2, 'L1', '2026-2027')
+     RETURNING id`,
+    [`SIG-T-${randomUUID().slice(0, 20)}`, testCourses.rows[0].filiere_id]
+  );
+  const linkedStudentId = linkedStudent.rows[0].id;
+  testStudentIds.push(linkedStudentId);
+
+  const linked = await request(`/users/${createdUser.payload.user.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { etudiant_id: linkedStudentId }
+  });
+  assert.equal(linked.status, 200);
+  const linkedCheck = await db.query('SELECT utilisateur_id FROM etudiants WHERE id = $1', [linkedStudentId]);
+  assert.equal(String(linkedCheck.rows[0].utilisateur_id), String(createdUser.payload.user.id));
+
+  const unlinked = await request(`/users/${createdUser.payload.user.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { etudiant_id: null }
+  });
+  assert.equal(unlinked.status, 200);
+  const unlinkedCheck = await db.query('SELECT utilisateur_id FROM etudiants WHERE id = $1', [linkedStudentId]);
+  assert.equal(unlinkedCheck.rows[0].utilisateur_id, null);
+
+  const deactivated = await request(`/users/${createdUser.payload.user.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { actif: false }
+  });
+  assert.equal(deactivated.status, 200);
+  assert.equal(deactivated.payload.user.actif, false);
 });
