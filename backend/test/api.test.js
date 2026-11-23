@@ -499,6 +499,27 @@ test('admission acceptance creates one student file and role access stays scoped
   assert.equal(deactivated.status, 200);
   assert.equal(deactivated.payload.user.actif, false);
 
+  const deactivatedLogin = await request('/auth/login', {
+    method: 'POST',
+    body: { email: createdUser.payload.user.email, password: 'Password123!' }
+  });
+  assert.equal(deactivatedLogin.status, 401);
+
+  const reactivated = await request(`/users/${createdUser.payload.user.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { actif: true, password: 'NewPassword123!' }
+  });
+  assert.equal(reactivated.status, 200);
+  assert.equal(reactivated.payload.user.actif, true);
+
+  const resetPasswordLogin = await request('/auth/login', {
+    method: 'POST',
+    body: { email: createdUser.payload.user.email, password: 'NewPassword123!' }
+  });
+  assert.equal(resetPasswordLogin.status, 200);
+  assert.ok(resetPasswordLogin.payload.token);
+
   const coursesForStudent = await request('/scolarite/courses', { token: studentUser.token });
   assert.equal(coursesForStudent.status, 200);
   assert.ok(Array.isArray(coursesForStudent.payload.courses));
