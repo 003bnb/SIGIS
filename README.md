@@ -98,6 +98,9 @@ Toutes les réponses sont en JSON. Les routes protégées prennent `Authorizatio
 | `POST` | `/api/scolarite/students` | Admin, Scolarité | Créer un dossier étudiant |
 | `GET` | `/api/scolarite/students/:id` | Admin, Scolarité | Consulter un dossier |
 | `PATCH` | `/api/scolarite/students/:id` | Admin, Scolarité | Mettre à jour la filière, le niveau, l’année ou le statut |
+| `GET` | `/api/scolarite/courses` | Admin, Scolarité | Lister les unités d’enseignement |
+| `POST` | `/api/scolarite/courses` | Admin, Scolarité | Créer une unité d’enseignement |
+| `POST` | `/api/scolarite/students/:id/enrollments` | Admin, Scolarité | Inscrire un étudiant à une UE compatible avec sa filière et son niveau |
 | `GET` | `/api/scolarite/me/student` | Authentifié | Dossier associé au compte connecté |
 | `POST` | `/api/notes` | Admin, Scolarité | Créer ou mettre à jour une note |
 | `GET` | `/api/notes/student/:studentId/transcript` | Admin, Scolarité, étudiant propriétaire | Relevé et agrégats ECTS |

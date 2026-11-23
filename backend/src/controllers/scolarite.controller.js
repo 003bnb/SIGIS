@@ -108,6 +108,80 @@ async function listPrograms(req, res, next) {
   }
 }
 
+async function listCourses(req, res, next) {
+  try {
+    const { rows } = await db.query(
+      `SELECT ue.id, ue.code, ue.intitule, ue.filiere_id, f.nom AS filiere,
+              ue.niveau, ue.semestre, ue.ects, ue.coefficient
+       FROM unites_enseignement ue
+       JOIN filieres f ON f.id = ue.filiere_id
+       ORDER BY f.nom, ue.niveau, ue.semestre, ue.code`
+    );
+    return res.json({ courses: rows });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function createCourse(req, res, next) {
+  const { code, intitule, filiere_id, niveau, semestre, ects, coefficient = 1 } = req.body || {};
+  const programId = Number(filiere_id);
+  const semester = Number(semestre);
+  const credits = Number(ects);
+  const courseCoefficient = Number(coefficient);
+  if (![code, intitule, niveau].every((value) => typeof value === 'string' && value.trim()) ||
+      !Number.isInteger(programId) || programId < 1 ||
+      !Number.isInteger(semester) || semester < 1 || semester > 12 ||
+      !Number.isFinite(credits) || credits <= 0 ||
+      !Number.isFinite(courseCoefficient) || courseCoefficient <= 0) {
+    return res.status(400).json({ error: 'Code, intitulé, filière, niveau, semestre, ECTS ou coefficient invalide.' });
+  }
+
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO unites_enseignement (code, intitule, filiere_id, niveau, semestre, ects, coefficient)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, code, intitule, filiere_id, niveau, semestre, ects, coefficient`,
+      [code.trim(), intitule.trim(), programId, niveau.trim(), semester, credits, courseCoefficient]
+    );
+    return res.status(201).json({ course: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function enrollStudentInCourse(req, res, next) {
+  const studentId = Number(req.params.id);
+  const courseId = Number(req.body?.ue_id);
+  if (!Number.isInteger(studentId) || studentId < 1 ||
+      !Number.isInteger(courseId) || courseId < 1) {
+    return res.status(400).json({ error: 'Identifiant étudiant ou UE invalide.' });
+  }
+
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique)
+       SELECT e.id, ue.id, e.annee_academique
+       FROM etudiants e
+       JOIN unites_enseignement ue
+         ON ue.id = $2 AND ue.filiere_id = e.filiere_id AND ue.niveau = e.niveau
+       WHERE e.id = $1
+       RETURNING id, etudiant_id, ue_id, annee_academique`,
+      [studentId, courseId]
+    );
+    if (!rows[0]) {
+      const student = await db.query('SELECT id FROM etudiants WHERE id = $1', [studentId]);
+      if (!student.rows[0]) return res.status(404).json({ error: 'Dossier étudiant introuvable.' });
+      const course = await db.query('SELECT id FROM unites_enseignement WHERE id = $1', [courseId]);
+      if (!course.rows[0]) return res.status(404).json({ error: 'Unité d’enseignement introuvable.' });
+      return res.status(400).json({ error: 'Cette UE ne correspond pas à la filière et au niveau de l’étudiant.' });
+    }
+    return res.status(201).json({ enrollment: rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 async function myStudentFile(req, res, next) {
   try {
     const { rows } = await db.query(
@@ -127,5 +201,6 @@ async function myStudentFile(req, res, next) {
 }
 
 module.exports = {
-  dashboard, listStudents, createStudent, getStudentFile, updateStudent, listPrograms, myStudentFile
+  dashboard, listStudents, createStudent, getStudentFile, updateStudent, listPrograms,
+  listCourses, createCourse, enrollStudentInCourse, myStudentFile
 };

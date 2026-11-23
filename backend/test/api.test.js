@@ -5,6 +5,11 @@ const db = require('../src/config/db');
 
 const apiBaseUrl = process.env.API_BASE_URL || 'http://127.0.0.1:3000/api';
 const candidateIds = [];
+const courseIds = [];
+
+after(async () => {
+  await db.end();
+});
 
 async function request(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' };
@@ -33,7 +38,9 @@ test('admission acceptance creates one student file and role access stays scoped
       await db.query('DELETE FROM etudiants WHERE candidat_id = ANY($1::bigint[])', [candidateIds]);
       await db.query('DELETE FROM candidats WHERE id = ANY($1::bigint[])', [candidateIds]);
     }
-    await db.end();
+    if (courseIds.length) {
+      await db.query('DELETE FROM unites_enseignement WHERE id = ANY($1::bigint[])', [courseIds]);
+    }
   });
 
   const [{ token: adminToken }, studentUser] = await Promise.all([
@@ -84,6 +91,69 @@ test('admission acceptance creates one student file and role access stays scoped
   assert.equal(accepted.status, 200);
   assert.equal(accepted.payload.candidate.statut, 'ACCEPTE');
   assert.match(accepted.payload.student.numero_etudiant, /^SIG-2026-\d{6,}$/);
+
+  const courseData = {
+    code: `TEST-${randomUUID().slice(0, 12)}`,
+    intitule: 'UE de test',
+    filiere_id: programId,
+    niveau: 'L1',
+    semestre: 1,
+    ects: 6
+  };
+  const createdCourse = await request('/scolarite/courses', {
+    method: 'POST',
+    token: adminToken,
+    body: courseData
+  });
+  assert.equal(createdCourse.status, 201);
+  courseIds.push(createdCourse.payload.course.id);
+
+  const courses = await request('/scolarite/courses', { token: adminToken });
+  assert.equal(courses.status, 200);
+  assert.ok(courses.payload.courses.some((course) => course.id === createdCourse.payload.course.id));
+
+  const forbiddenCourseCreation = await request('/scolarite/courses', {
+    method: 'POST',
+    token: studentUser.token,
+    body: { ...courseData, code: `NO-${randomUUID().slice(0, 12)}` }
+  });
+  assert.equal(forbiddenCourseCreation.status, 403);
+
+  const enrollment = await request(`/scolarite/students/${accepted.payload.student.id}/enrollments`, {
+    method: 'POST',
+    token: adminToken,
+    body: { ue_id: createdCourse.payload.course.id }
+  });
+  assert.equal(enrollment.status, 201);
+  assert.equal(enrollment.payload.enrollment.annee_academique, '2026-2027');
+
+  const duplicateEnrollment = await request(`/scolarite/students/${accepted.payload.student.id}/enrollments`, {
+    method: 'POST',
+    token: adminToken,
+    body: { ue_id: createdCourse.payload.course.id }
+  });
+  assert.equal(duplicateEnrollment.status, 409);
+
+  const mismatchedCourse = await request('/scolarite/courses', {
+    method: 'POST',
+    token: adminToken,
+    body: { ...courseData, code: `TEST-${randomUUID().slice(0, 12)}`, niveau: 'L2' }
+  });
+  assert.equal(mismatchedCourse.status, 201);
+  courseIds.push(mismatchedCourse.payload.course.id);
+  const mismatchedEnrollment = await request(`/scolarite/students/${accepted.payload.student.id}/enrollments`, {
+    method: 'POST',
+    token: adminToken,
+    body: { ue_id: mismatchedCourse.payload.course.id }
+  });
+  assert.equal(mismatchedEnrollment.status, 400);
+
+  const transcript = await request(`/notes/student/${accepted.payload.student.id}/transcript`, {
+    token: adminToken
+  });
+  assert.equal(transcript.status, 200);
+  assert.equal(transcript.payload.courses[0].average, null);
+  assert.equal(transcript.payload.summary.ects_total, 6);
 
   const studentFiles = await db.query(
     'SELECT id, numero_etudiant FROM etudiants WHERE candidat_id = $1',
