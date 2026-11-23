@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { recordAudit } = require('../utils/audit');
 
 async function upsertGrade(req, res, next) {
   const { inscription_ue_id, type_evaluation, note, commentaire } = req.body || {};
@@ -20,6 +21,18 @@ async function upsertGrade(req, res, next) {
        RETURNING id, inscription_ue_id, type_evaluation, note`,
       [inscription_ue_id, type_evaluation, parsedGrade, commentaire || null, req.user.sub]
     );
+    await recordAudit({
+      userId: req.user?.sub,
+      action: 'GRADE_UPSERT',
+      resourceType: 'note',
+      resourceId: rows[0].id,
+      details: {
+        inscription_ue_id: rows[0].inscription_ue_id,
+        type_evaluation: rows[0].type_evaluation,
+        note: rows[0].note
+      },
+      ipAddress: req.ip
+    });
     return res.status(200).json({ grade: rows[0] });
   } catch (error) {
     return next(error);

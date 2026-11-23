@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const { recordAudit } = require('../utils/audit');
 
 const ROLES = new Set(['ADMIN', 'SCOLARITE', 'ETUDIANT']);
 
@@ -66,6 +67,14 @@ async function createUser(req, res, next) {
        RETURNING id, nom_complet, email, role, actif, created_at`,
       [nomComplet, email, passwordHash, role, actif]
     );
+    await recordAudit({
+      userId: req.user?.sub,
+      action: 'USER_CREATE',
+      resourceType: 'utilisateur',
+      resourceId: rows[0].id,
+      details: { email: rows[0].email, role: rows[0].role, actif: rows[0].actif },
+      ipAddress: req.ip
+    });
     return res.status(201).json({ user: rows[0] });
   } catch (error) {
     return next(error);
@@ -152,6 +161,21 @@ async function updateUser(req, res, next) {
     );
 
     await client.query('COMMIT');
+    const auditDetails = {};
+    if (hasNom) auditDetails.nom_complet = true;
+    if (hasEmail) auditDetails.email = rows[0].email;
+    if (hasRole) auditDetails.role = rows[0].role;
+    if (hasActif) auditDetails.actif = rows[0].actif;
+    if (hasPassword) auditDetails.password_reset = true;
+    if (hasLink) auditDetails.etudiant_id = etudiantId;
+    await recordAudit({
+      userId: req.user?.sub,
+      action: 'USER_UPDATE',
+      resourceType: 'utilisateur',
+      resourceId: rows[0].id,
+      details: auditDetails,
+      ipAddress: req.ip
+    });
     return res.json({ user: rows[0] });
   } catch (error) {
     await client.query('ROLLBACK');

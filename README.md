@@ -54,6 +54,7 @@ Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par Post
 ```bash
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/001_academic_validation.sql
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/002_admission_workflow.sql
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/003_audit_logs.sql
 ```
 
 Les migrations refusent les données existantes qui ne respectent pas les contraintes (notamment les doublons email/année). Corrigez-les avant de les appliquer. Pour injecter à nouveau les données de démonstration dans la base courante :
@@ -203,6 +204,12 @@ Certaines règles académiques ne sont pas encore spécifiées formellement et n
 - **Notes et évaluations** : barèmes particuliers, sessions de rattrapage, absence/dispense, arrondis officiels et verrouillage après validation.
 - **Dossiers et comptes** : cycle de vie complet des comptes (invitation/activation/réinitialisation), pièces complémentaires exigibles, conservation/archivage des données (RGPD/réglementation locale).
 
+## Sécurité et journalisation (socle)
+
+- **Comptes** : endpoints ADMIN pour créer/lister/modifier les utilisateurs, activer/désactiver les comptes, réinitialiser les mots de passe (≥ 8 caractères) et lier/délier un dossier étudiant.
+- **Journalisation d’audit** : table `audit_logs` (migration `003_audit_logs.sql`) et enregistrement des actions sensibles (gestion des comptes, décisions d’admission, saisie/mise à jour de notes) avec utilisateur, ressource, horodatage et adresse IP lorsque disponible.
+- **Contrôles existants** : authentification JWT, RBAC, limitation de débit sur connexion/dépôt de candidature, en-têtes de sécurité (`helmet`), validation des entrées et contraintes d’intégrité en base.
+
 ## Limites avant production
 
-Cette base constitue un socle de démarrage, pas un déploiement institutionnel prêt à accueillir des données réelles. Avant production, prévoir notamment TLS derrière un reverse proxy, secrets gérés hors dépôt, politique de rotation des clés, sauvegardes externalisées, migrations contrôlées, journalisation/audit, tests automatisés, gestion des comptes et réinitialisation de mot de passe, conformité aux règles locales de protection des données, et validation formelle du calcul des notes. Les données seed sont fictives.
+Cette base constitue un socle de démarrage, pas un déploiement institutionnel prêt à accueillir des données réelles. Avant production, prévoir notamment TLS derrière un reverse proxy, secrets gérés hors dépôt, politique de rotation/révocation des clés, sauvegardes externalisées, migrations contrôlées et testées, supervision/alerting, durcissement complet des politiques de mots de passe/sessions, protection RGPD/rétention des données, et validation formelle des règles métier et du calcul des notes. Les données seed sont fictives.

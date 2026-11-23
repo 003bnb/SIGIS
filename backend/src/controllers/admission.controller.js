@@ -5,6 +5,7 @@ const {
   getStoredPath, removeFile, safeOriginalName, verifyDiploma
 } = require('../middleware/candidate-document');
 const { isValidAcademicYear, isValidLevel } = require('../validation/academic');
+const { recordAudit } = require('../utils/audit');
 
 async function createCandidate(req, res, next) {
   const { nom, prenom, email, telephone, date_naissance, filiere_id, niveau_souhaite, annee_academique } = req.body || {};
@@ -184,6 +185,20 @@ async function updateCandidateStatus(req, res, next) {
       [statut, refusalReason, candidateId]
     );
     await client.query('COMMIT');
+    await recordAudit({
+      userId: req.user?.sub,
+      action: 'ADMISSION_STATUS_UPDATE',
+      resourceType: 'candidat',
+      resourceId: candidateId,
+      details: {
+        previous_status: candidate.statut,
+        new_status: statut,
+        refusal_reason_provided: Boolean(refusalReason),
+        student_id: student?.id || null,
+        student_status: student?.statut || null
+      },
+      ipAddress: req.ip
+    });
     return res.json({ candidate: result.rows[0], student });
   } catch (error) {
     await client.query('ROLLBACK');
