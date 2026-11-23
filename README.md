@@ -92,7 +92,9 @@ Le calcul s’effectue sur les inscriptions de l’année académique active du 
 
 ## API principale
 
-Toutes les réponses sont en JSON. Les routes protégées prennent `Authorization: Bearer <jeton>`.
+Toutes les réponses sont en JSON sauf le téléchargement de document (`GET /api/admission/:id/documents/diplome`). Les routes protégées prennent `Authorization: Bearer <jeton>`.
+
+Documentation détaillée des endpoints : [docs/API.md](docs/API.md).
 
 | Méthode | Route | Accès | Fonction |
 |---|---|---|---|
