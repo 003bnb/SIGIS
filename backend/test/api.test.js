@@ -520,6 +520,26 @@ test('admission acceptance creates one student file and role access stays scoped
   assert.equal(resetPasswordLogin.status, 200);
   assert.ok(resetPasswordLogin.payload.token);
 
+  const wrongSelfChange = await request('/auth/change-password', {
+    method: 'POST',
+    token: resetPasswordLogin.payload.token,
+    body: { current_password: 'mauvais-mot-de-passe', new_password: 'AnotherPass123!' }
+  });
+  assert.equal(wrongSelfChange.status, 401);
+
+  const selfChange = await request('/auth/change-password', {
+    method: 'POST',
+    token: resetPasswordLogin.payload.token,
+    body: { current_password: 'NewPassword123!', new_password: 'AnotherPass123!' }
+  });
+  assert.equal(selfChange.status, 200);
+
+  const selfChangedLogin = await request('/auth/login', {
+    method: 'POST',
+    body: { email: createdUser.payload.user.email, password: 'AnotherPass123!' }
+  });
+  assert.equal(selfChangedLogin.status, 200);
+
   const coursesForStudent = await request('/scolarite/courses', { token: studentUser.token });
   assert.equal(coursesForStudent.status, 200);
   assert.ok(Array.isArray(coursesForStudent.payload.courses));

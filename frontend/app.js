@@ -208,6 +208,98 @@ async function loadMyTranscript() {
   </tr>`).join('') : '<tr><td colspan="6" class="muted">Aucune inscription pédagogique pour le moment.</td></tr>';
 }
 
+async function loadMyEnrollments() {
+  const body = document.querySelector('#my-enrollment-rows');
+  if (!body) return;
+  const { enrollments } = await api('/scolarite/me/enrollments');
+  body.innerHTML = enrollments.length ? enrollments.map((item) => `<tr>
+    <td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.intitule)}</td><td>${escapeHtml(item.semestre)}</td>
+    <td>${formatNumber(item.ects)}</td><td>${escapeHtml(item.annee_academique)}</td>
+  </tr>`).join('') : '<tr><td colspan="5" class="muted">Aucune inscription aux UE.</td></tr>';
+}
+
+async function loadUsers() {
+  const body = document.querySelector('#user-rows');
+  if (!body) return;
+  const { users } = await api('/users');
+  body.innerHTML = users.length ? users.map((u) => `<tr>
+    <td>${escapeHtml(u.nom_complet || '—')}</td>
+    <td>${escapeHtml(u.email)}</td>
+    <td>${escapeHtml(u.role)}</td>
+    <td>${u.actif ? 'Oui' : 'Non'}</td>
+    <td>${escapeHtml(u.etudiant_id || '—')}</td>
+    <td><div class="action-group">
+      <button class="button button-secondary" data-user-action="toggle" data-user-id="${u.id}" data-user-actif="${u.actif ? '1' : '0'}">${u.actif ? 'Désactiver' : 'Activer'}</button>
+      <button class="button button-quiet" data-user-action="password" data-user-id="${u.id}">Mot de passe</button>
+      <button class="button button-quiet" data-user-action="link" data-user-id="${u.id}" data-user-etudiant="${escapeHtml(u.etudiant_id || '')}">Lier étudiant</button>
+    </div></td>
+  </tr>`).join('') : '<tr><td colspan="6" class="muted">Aucun utilisateur.</td></tr>';
+}
+
+async function loadCourses() {
+  const body = document.querySelector('#course-rows');
+  if (!body) return;
+  const { courses } = await api('/scolarite/courses');
+  body.innerHTML = courses.length ? courses.map((course) => `<tr>
+    <td>${escapeHtml(course.code)}</td><td>${escapeHtml(course.intitule)}</td><td>${escapeHtml(course.filiere_nom)}</td>
+    <td>${escapeHtml(course.niveau)}</td><td>${escapeHtml(course.semestre)}</td><td>${formatNumber(course.ects)}</td>
+  </tr>`).join('') : '<tr><td colspan="6" class="muted">Aucune UE.</td></tr>';
+  const select = document.querySelector('#enrollment-course');
+  if (select) {
+    const current = select.value;
+    select.innerHTML = '<option value="">Choisir une UE</option>' +
+      courses.map((course) => `<option value="${course.id}">${escapeHtml(course.code)} — ${escapeHtml(course.intitule)}</option>`).join('');
+    if (current) select.value = current;
+  }
+}
+
+async function loadEnrollments() {
+  const body = document.querySelector('#enrollment-rows');
+  if (!body) return;
+  const { enrollments } = await api('/scolarite/enrollments');
+  body.innerHTML = enrollments.length ? enrollments.map((item) => `<tr>
+    <td>${escapeHtml(item.numero_etudiant)} — ${escapeHtml(item.nom_complet || '')}</td>
+    <td>${escapeHtml(item.code)} — ${escapeHtml(item.intitule)}</td>
+    <td>${escapeHtml(item.semestre)}</td><td>${formatNumber(item.ects)}</td><td>${escapeHtml(item.annee_academique)}</td>
+    <td><button class="button button-quiet" data-enrollment-delete="${item.id}">Supprimer</button></td>
+  </tr>`).join('') : '<tr><td colspan="6" class="muted">Aucune inscription.</td></tr>';
+}
+
+function populateEnrollmentStudents(students) {
+  const select = document.querySelector('#enrollment-student');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">Choisir un étudiant</option>' +
+    (students || []).map((student) => `<option value="${student.id}">${escapeHtml(student.numero_etudiant)} — ${escapeHtml(student.nom_complet || student.filiere)}</option>`).join('');
+  if (current) select.value = current;
+}
+
+function initPasswordForm(feedbackSelector = '#password-feedback', formSelector = '#password-form') {
+  const form = document.querySelector(formSelector);
+  if (!form) return;
+  const feedback = document.querySelector(feedbackSelector);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    try {
+      await api('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: form.elements['current-password'].value,
+          new_password: form.elements['new-password'].value
+        })
+      });
+      form.reset();
+      showFeedback(feedback, 'Mot de passe mis à jour.', 'success');
+    } catch (error) {
+      showFeedback(feedback, error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
 async function initDashboard() {
   const staffSection = document.querySelector('#staff-dashboard');
   if (!staffSection) return;
@@ -225,35 +317,75 @@ async function initDashboard() {
     location.href = '/';
   });
   const feedback = document.querySelector('#page-feedback');
+  const passwordPanel = document.querySelector('#password-panel');
   try {
     if (user.role === 'ETUDIANT') {
       document.querySelector('#student-dashboard').classList.remove('hidden');
+      if (passwordPanel) passwordPanel.classList.remove('hidden');
       document.querySelector('.page-heading .muted').textContent = 'Consultez votre dossier et vos résultats académiques.';
       document.querySelector('.page-heading .button').classList.add('hidden');
-      await loadMyTranscript();
+      initPasswordForm();
+      await Promise.all([loadMyTranscript(), loadMyEnrollments()]);
       return;
     }
 
     staffSection.classList.remove('hidden');
-    await Promise.all([
+    if (passwordPanel) passwordPanel.classList.remove('hidden');
+    initPasswordForm();
+
+    const studentsPromise = api('/scolarite/students').then((result) => {
+      populateEnrollmentStudents(result.students);
+      const body = document.querySelector('#student-rows');
+      body.innerHTML = result.students.length ? result.students.map((student) => `<tr>
+        <td>${escapeHtml(student.numero_etudiant)}</td><td>${escapeHtml(student.nom_complet || '—')}</td>
+        <td>${escapeHtml(student.filiere)}</td><td>${escapeHtml(student.niveau)}</td><td>${escapeHtml(student.statut)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="muted">Aucun étudiant.</td></tr>';
+      const select = document.querySelector('#grade-student');
+      select.innerHTML = '<option value="">Choisir un étudiant</option>' +
+        result.students.map((student) => `<option value="${student.id}">${escapeHtml(student.numero_etudiant)} — ${escapeHtml(student.nom_complet || student.filiere)}</option>`).join('');
+      return result.students;
+    });
+
+    const tasks = [
       api('/scolarite/dashboard').then((result) => {
         document.querySelector('#metric-students').textContent = formatNumber(result.indicators.etudiants_actifs);
         document.querySelector('#metric-candidates').textContent = formatNumber(result.indicators.candidatures_en_attente);
         document.querySelector('#metric-ues').textContent = formatNumber(result.indicators.unites_enseignement);
         document.querySelector('#metric-grades').textContent = formatNumber(result.indicators.notes_saisies);
       }),
-      loadStudents(),
+      studentsPromise,
       loadCandidates(),
-      loadPrograms()
-    ]);
+      api('/scolarite/programs').then(({ programs }) => {
+        const options = '<option value="">Choisir une filière</option>' +
+          programs.map((program) => `<option value="${program.id}">${escapeHtml(program.nom)}</option>`).join('');
+        document.querySelector('#student-program').innerHTML = options;
+        const courseProgram = document.querySelector('#course-program');
+        if (courseProgram) courseProgram.innerHTML = options;
+      }),
+      loadCourses(),
+      loadEnrollments()
+    ];
+
+    if (user.role === 'ADMIN') {
+      document.querySelector('#account-management-panel')?.classList.remove('hidden');
+      tasks.push(loadUsers());
+    }
+    if (user.role === 'ADMIN' || user.role === 'SCOLARITE') {
+      document.querySelector('#courses-panel')?.classList.remove('hidden');
+      document.querySelector('#enrollments-panel')?.classList.remove('hidden');
+    }
+
+    await Promise.all(tasks);
   } catch (error) {
     showFeedback(feedback, error.message, 'error');
   }
 
-  document.querySelector('#refresh-candidates').addEventListener('click', async () => {
+  const refreshCandidates = document.querySelector('#refresh-candidates');
+  refreshCandidates?.addEventListener('click', async () => {
     try { await loadCandidates(); } catch (error) { showFeedback(feedback, error.message, 'error'); }
   });
-  document.querySelector('#candidate-rows').addEventListener('click', async (event) => {
+
+  document.querySelector('#candidate-rows')?.addEventListener('click', async (event) => {
     const button = event.target.closest('button[data-status]');
     const downloadButton = event.target.closest('button[data-download-diploma]');
     if (downloadButton) {
@@ -298,10 +430,12 @@ async function initDashboard() {
       button.disabled = false;
     }
   });
-  document.querySelector('#grade-student').addEventListener('change', async (event) => {
+
+  document.querySelector('#grade-student')?.addEventListener('change', async (event) => {
     try { await loadStudentCourses(event.target.value); } catch (error) { showFeedback(feedback, error.message, 'error'); }
   });
-  document.querySelector('#grade-form').addEventListener('submit', async (event) => {
+
+  document.querySelector('#grade-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const gradeFeedback = document.querySelector('#grade-feedback');
@@ -326,7 +460,8 @@ async function initDashboard() {
       button.disabled = false;
     }
   });
-  document.querySelector('#student-form').addEventListener('submit', async (event) => {
+
+  document.querySelector('#student-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const button = form.querySelector('button[type="submit"]');
@@ -345,7 +480,7 @@ async function initDashboard() {
       showFeedback(studentFeedback, 'Dossier étudiant créé.', 'success');
       form.reset();
       form.elements['student-year'].value = '2026-2027';
-      await loadStudents();
+      await studentsRefresh();
       const { indicators } = await api('/scolarite/dashboard');
       document.querySelector('#metric-students').textContent = formatNumber(indicators.etudiants_actifs);
     } catch (error) {
@@ -354,6 +489,163 @@ async function initDashboard() {
       button.disabled = false;
     }
   });
+
+  document.querySelector('#refresh-users')?.addEventListener('click', async () => {
+    try { await loadUsers(); showFeedback(document.querySelector('#users-feedback'), 'Liste actualisée.', 'success'); }
+    catch (error) { showFeedback(document.querySelector('#users-feedback'), error.message, 'error'); }
+  });
+
+  document.querySelector('#create-user-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const createFeedback = document.querySelector('#create-user-feedback');
+    button.disabled = true;
+    try {
+      await api('/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          nom_complet: form.elements['new-user-name'].value,
+          email: form.elements['new-user-email'].value,
+          role: form.elements['new-user-role'].value,
+          password: form.elements['new-user-password'].value
+        })
+      });
+      form.reset();
+      showFeedback(createFeedback, 'Compte créé.', 'success');
+      await loadUsers();
+    } catch (error) {
+      showFeedback(createFeedback, error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#user-rows')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-user-action]');
+    if (!button) return;
+    button.disabled = true;
+    const userId = button.dataset.userId;
+    try {
+      if (button.dataset.userAction === 'toggle') {
+        await api(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ actif: button.dataset.userActif !== '1' }) });
+      } else if (button.dataset.userAction === 'password') {
+        const password = window.prompt('Nouveau mot de passe (8 caractères minimum) :');
+        if (password === null) { button.disabled = false; return; }
+        await api(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ password }) });
+      } else if (button.dataset.userAction === 'link') {
+        const current = button.dataset.userEtudiant || '';
+        const value = window.prompt('Identifiant UUID de l’étudiant à lier (laisser vide pour dissocier) :', current);
+        if (value === null) { button.disabled = false; return; }
+        await api(`/users/${userId}`, { method: 'PATCH', body: JSON.stringify({ etudiant_id: value.trim() || null }) });
+      }
+      await loadUsers();
+      showFeedback(document.querySelector('#users-feedback'), 'Compte mis à jour.', 'success');
+    } catch (error) {
+      showFeedback(document.querySelector('#users-feedback'), error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#refresh-courses')?.addEventListener('click', async () => {
+    try { await loadCourses(); showFeedback(document.querySelector('#course-feedback'), 'Liste actualisée.', 'success'); }
+    catch (error) { showFeedback(document.querySelector('#course-feedback'), error.message, 'error'); }
+  });
+
+  document.querySelector('#course-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const courseFeedback = document.querySelector('#course-feedback');
+    button.disabled = true;
+    try {
+      await api('/scolarite/courses', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: form.elements['course-code'].value,
+          intitule: form.elements['course-title'].value,
+          filiere_id: form.elements['course-program'].value,
+          niveau: form.elements['course-level'].value,
+          semestre: form.elements['course-semester'].value,
+          ects: form.elements['course-ects'].value
+        })
+      });
+      form.reset();
+      showFeedback(courseFeedback, 'UE créée.', 'success');
+      await loadCourses();
+      const { indicators } = await api('/scolarite/dashboard');
+      document.querySelector('#metric-ues').textContent = formatNumber(indicators.unites_enseignement);
+    } catch (error) {
+      showFeedback(courseFeedback, error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#refresh-enrollments')?.addEventListener('click', async () => {
+    try { await loadEnrollments(); showFeedback(document.querySelector('#enrollment-feedback'), 'Liste actualisée.', 'success'); }
+    catch (error) { showFeedback(document.querySelector('#enrollment-feedback'), error.message, 'error'); }
+  });
+
+  document.querySelector('#enrollment-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button[type="submit"]');
+    const enrollmentFeedback = document.querySelector('#enrollment-feedback');
+    button.disabled = true;
+    try {
+      await api('/scolarite/enrollments', {
+        method: 'POST',
+        body: JSON.stringify({
+          etudiant_id: form.elements['enrollment-student'].value,
+          unite_enseignement_id: form.elements['enrollment-course'].value,
+          annee_academique: form.elements['enrollment-year'].value
+        })
+      });
+      showFeedback(enrollmentFeedback, 'Inscription créée.', 'success');
+      await loadEnrollments();
+    } catch (error) {
+      showFeedback(enrollmentFeedback, error.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector('#enrollment-rows')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('button[data-enrollment-delete]');
+    if (!button) return;
+    if (!window.confirm('Supprimer cette inscription ?')) return;
+    button.disabled = true;
+    try {
+      await api(`/scolarite/enrollments/${button.dataset.enrollmentDelete}`, { method: 'DELETE' });
+      await loadEnrollments();
+      showFeedback(document.querySelector('#enrollment-feedback'), 'Inscription supprimée.', 'success');
+    } catch (error) {
+      showFeedback(document.querySelector('#enrollment-feedback'), error.message, 'error');
+      button.disabled = false;
+    }
+  });
+}
+
+async function studentsRefresh() {
+  const { students } = await api('/scolarite/students');
+  populateEnrollmentStudents(students);
+  const body = document.querySelector('#student-rows');
+  if (body) {
+    body.innerHTML = students.length ? students.map((student) => `<tr>
+      <td>${escapeHtml(student.numero_etudiant)}</td><td>${escapeHtml(student.nom_complet || '—')}</td>
+      <td>${escapeHtml(student.filiere)}</td><td>${escapeHtml(student.niveau)}</td><td>${escapeHtml(student.statut)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">Aucun étudiant.</td></tr>';
+  }
+  const select = document.querySelector('#grade-student');
+  if (select) {
+    const current = select.value;
+    select.innerHTML = '<option value="">Choisir un étudiant</option>' +
+      students.map((student) => `<option value="${student.id}">${escapeHtml(student.numero_etudiant)} — ${escapeHtml(student.nom_complet || student.filiere)}</option>`).join('');
+    if (current) select.value = current;
+  }
+  return students;
 }
 
 document.addEventListener('DOMContentLoaded', () => {

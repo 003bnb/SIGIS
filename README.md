@@ -52,6 +52,8 @@ Les journaux se consultent avec `docker compose logs -f backend frontend db`.
 Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par PostgreSQL uniquement lors de l’initialisation d’un volume de données vierge. Pour une base déjà initialisée, sauvegardez-la puis appliquez une seule fois les migrations dans l’ordre :
 
 ```bash
+./scripts/apply-migrations.sh
+# ou manuellement :
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/001_academic_validation.sql
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/002_admission_workflow.sql
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/003_audit_logs.sql
@@ -100,6 +102,7 @@ Documentation détaillée des endpoints : [docs/API.md](docs/API.md).
 |---|---|---|---|
 | `POST` | `/api/auth/login` | Public | Connexion et création du JWT |
 | `GET` | `/api/auth/me` | Authentifié | Profil de l’utilisateur connecté |
+| `POST` | `/api/auth/change-password` | Authentifié | Changer son mot de passe (mot de passe actuel requis) |
 | `GET` | `/api/users` | Admin | Lister les comptes utilisateurs |
 | `POST` | `/api/users` | Admin | Créer un compte (mot de passe ≥ 8 caractères) |
 | `PATCH` | `/api/users/:id` | Admin | Modifier, activer/désactiver, réinitialiser le mot de passe ou lier/délier un dossier étudiant (`etudiant_id`) |
@@ -123,6 +126,10 @@ Documentation détaillée des endpoints : [docs/API.md](docs/API.md).
 | `DELETE` | `/api/scolarite/enrollments/:id` | Admin, Scolarité | Supprimer une inscription à une UE |
 | `POST` | `/api/notes` | Admin, Scolarité | Créer ou mettre à jour une note |
 | `GET` | `/api/notes/student/:studentId/transcript` | Admin, Scolarité, étudiant propriétaire | Relevé et agrégats ECTS |
+
+## Vérification CI
+
+Le workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) construit les services Docker (`db`, `backend`), attend la disponibilité de l’API, puis exécute `npm test` dans le conteneur backend. En cas d’échec, consultez les journaux du job GitHub Actions correspondant (étapes *Wait for backend health* et *Show logs on failure*).
 
 ## Sauvegarde et restauration
 

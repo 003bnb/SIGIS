@@ -14,6 +14,9 @@ Les routes protégées requièrent l’en-tête `Authorization: Bearer <jeton>` 
   - Réponse : `{ token, user: { id, nom_complet, email, role } }`
 - `GET /api/auth/me` (authentifié)
   - Réponse : `{ user }`
+- `POST /api/auth/change-password` (authentifié)
+  - Corps JSON : `{ "current_password": string, "new_password": string (>=8, différent de l’actuel) }`
+  - Réponse : `{ ok: true }`
 
 ## Comptes utilisateurs (ADMIN)
 - `GET /api/users`

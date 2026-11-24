@@ -49,4 +49,40 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { login, me };
+async function changePassword(req, res, next) {
+  const body = req.body || {};
+  const currentPassword = String(body.current_password || '');
+  const newPassword = String(body.new_password || '');
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Mot de passe actuel et nouveau mot de passe sont obligatoires.' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Le nouveau mot de passe doit contenir au moins 8 caractères.' });
+  }
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: 'Le nouveau mot de passe doit être différent du mot de passe actuel.' });
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT id, mot_de_passe_hash FROM utilisateurs WHERE id = $1 AND actif = TRUE`,
+      [req.user.sub]
+    );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
+    const valid = await bcrypt.compare(currentPassword, user.mot_de_passe_hash);
+    if (!valid) return res.status(401).json({ error: 'Mot de passe actuel incorrect.' });
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await db.query(
+      `UPDATE utilisateurs SET mot_de_passe_hash = $1, updated_at = NOW() WHERE id = $2`,
+      [passwordHash, user.id]
+    );
+    return res.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { login, me, changePassword };

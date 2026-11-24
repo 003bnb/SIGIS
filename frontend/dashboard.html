@@ -75,7 +75,73 @@
         <div class="table-wrap"><table><thead><tr><th>UE</th><th>Semestre</th><th>ECTS</th><th>CC</th><th>Examen</th><th>Moyenne</th></tr></thead>
           <tbody id="transcript-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
       </section>
+      <section class="panel">
+        <div class="section-heading"><div><p class="eyebrow">Parcours</p><h2>Mes inscriptions aux UE</h2></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Code</th><th>Intitulé</th><th>Semestre</th><th>ECTS</th><th>Année académique</th></tr></thead>
+          <tbody id="my-enrollment-rows"><tr><td colspan="5" class="muted">Chargement…</td></tr></tbody></table></div>
+      </section>
     </section>
+
+    <section id="account-management-panel" class="panel hidden">
+      <div class="section-heading"><div><p class="eyebrow">Administration</p><h2>Gestion des comptes</h2></div>
+        <button class="button button-secondary" id="refresh-users" type="button">Actualiser</button>
+      </div>
+      <form id="create-user-form" class="grade-form">
+        <div><label for="new-user-name">Nom complet</label><input id="new-user-name" required maxlength="160"></div>
+        <div><label for="new-user-email">Email</label><input id="new-user-email" type="email" required maxlength="254"></div>
+        <div><label for="new-user-role">Rôle</label><select id="new-user-role" required><option value="ADMIN">ADMIN</option><option value="SCOLARITE">SCOLARITE</option><option value="ETUDIANT">ETUDIANT</option></select></div>
+        <div><label for="new-user-password">Mot de passe</label><input id="new-user-password" type="password" minlength="8" required></div>
+        <button class="button button-primary" type="submit">Créer le compte</button>
+      </form>
+      <p class="feedback" id="create-user-feedback" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Actif</th><th>Étudiant lié</th><th>Actions</th></tr></thead>
+        <tbody id="user-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+      <p class="feedback" id="users-feedback" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="courses-panel" class="panel hidden">
+      <div class="section-heading"><div><p class="eyebrow">Pédagogie</p><h2>Unités d’enseignement</h2></div>
+        <button class="button button-secondary" id="refresh-courses" type="button">Actualiser</button>
+      </div>
+      <form id="course-form" class="grade-form">
+        <div><label for="course-code">Code</label><input id="course-code" required maxlength="30"></div>
+        <div><label for="course-title">Intitulé</label><input id="course-title" required maxlength="180"></div>
+        <div><label for="course-program">Filière</label><select id="course-program" required><option value="">Chargement…</option></select></div>
+        <div><label for="course-level">Niveau</label><select id="course-level" required><option>L1</option><option>L2</option><option>L3</option><option>M1</option><option>M2</option></select></div>
+        <div><label for="course-semester">Semestre</label><input id="course-semester" type="number" min="1" max="10" required></div>
+        <div><label for="course-ects">ECTS</label><input id="course-ects" type="number" min="0.5" step="0.5" required></div>
+        <button class="button button-primary" type="submit">Créer l’UE</button>
+      </form>
+      <p class="feedback" id="course-feedback" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Code</th><th>Intitulé</th><th>Filière</th><th>Niveau</th><th>Sem.</th><th>ECTS</th></tr></thead>
+        <tbody id="course-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+    </section>
+
+    <section id="enrollments-panel" class="panel hidden">
+      <div class="section-heading"><div><p class="eyebrow">Inscriptions</p><h2>Inscriptions aux UE</h2></div>
+        <button class="button button-secondary" id="refresh-enrollments" type="button">Actualiser</button>
+      </div>
+      <form id="enrollment-form" class="grade-form">
+        <div><label for="enrollment-student">Étudiant</label><select id="enrollment-student" required><option value="">Choisir</option></select></div>
+        <div><label for="enrollment-course">UE</label><select id="enrollment-course" required><option value="">Choisir</option></select></div>
+        <div><label for="enrollment-year">Année académique</label><input id="enrollment-year" required pattern="[0-9]{4}-[0-9]{4}" value="2026-2027"></div>
+        <button class="button button-primary" type="submit">Inscrire</button>
+      </form>
+      <p class="feedback" id="enrollment-feedback" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Étudiant</th><th>UE</th><th>Sem.</th><th>ECTS</th><th>Année</th><th>Action</th></tr></thead>
+        <tbody id="enrollment-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+    </section>
+
+    <section id="password-panel" class="panel hidden">
+      <div class="section-heading"><div><p class="eyebrow">Compte</p><h2>Changer mon mot de passe</h2></div></div>
+      <form id="password-form" class="grade-form">
+        <div><label for="current-password">Mot de passe actuel</label><input id="current-password" type="password" required></div>
+        <div><label for="new-password">Nouveau mot de passe</label><input id="new-password" type="password" minlength="8" required></div>
+        <button class="button button-primary" type="submit">Mettre à jour</button>
+      </form>
+      <p class="feedback" id="password-feedback" role="status" aria-live="polite"></p>
+    </section>
+
     <p class="feedback page-feedback" id="page-feedback" role="status" aria-live="polite"></p>
   </main>
 </body>
