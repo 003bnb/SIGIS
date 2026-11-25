@@ -67,15 +67,17 @@ Les routes protégées requièrent l’en-tête `Authorization: Bearer <jeton>` 
 - `GET /api/scolarite/me/enrollments` (authentifié, dossier étudiant requis) — `{ enrollments }`
 - `POST /api/scolarite/enrollments` (ADMIN, SCOLARITE)
   - Corps JSON : `{ "etudiant_id", "ue_id", "annee_academique" }`
+  - Règles : l’UE doit appartenir au même programme et au même niveau que l’étudiant ; une seule inscription par étudiant/UE/année académique.
 - `DELETE /api/scolarite/enrollments/:id` (ADMIN, SCOLARITE) — `204`
 
 ## Notes et relevés
 - `POST /api/notes` (ADMIN, SCOLARITE)
-  - Corps JSON : `{ "inscription_ue_id", "type_evaluation": "CC"|"EXAM", "note": 0..20, "commentaire"? }`
+  - Corps JSON : `{ "inscription_ue_id", "type_evaluation": "CC"|"EXAM"|"RATTRAPAGE", "note": 0..20, "commentaire"?, "verrouillee"?: boolean (ADMIN) }`
   - Réponse : `{ grade }`
+  - Règles : note verrouillée à la saisie ; SCOLARITE ne peut pas modifier une note verrouillée, ADMIN peut modifier/déverrouiller. Composante examen = meilleure note entre `EXAM` et `RATTRAPAGE` (best-of).
 - `GET /api/notes/student/:studentId/transcript` (ADMIN, SCOLARITE, étudiant propriétaire)
   - Réponse : `{ student, courses, summary, calculation }`
-  - Règle de calcul : moyenne UE = CC×40% + examen×60% (ou note disponible seule) ; moyenne générale pondérée par les ECTS, calculée uniquement lorsque chaque UE inscrite a au moins une note.
+  - Calcul : moyenne UE = CC×40% + meilleure note EXAM/RATTRAPAGE×60% (ou note disponible seule). UE validée si moyenne >= 10. Année validée si toutes les UE sont notées et ECTS validés >= 60 ; sinon `REDOUBLEMENT` (`EN_COURS` si notes incomplètes). Moyenne générale pondérée par les ECTS, calculée uniquement lorsque chaque UE a une moyenne.
 
 ## Codes d’erreur principaux
 - `400` : données invalides/manquantes

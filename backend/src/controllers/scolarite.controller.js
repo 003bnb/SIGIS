@@ -341,6 +341,32 @@ async function createEnrollment(req, res, next) {
     return res.status(400).json({ error: 'Année académique invalide. Format attendu : YYYY-YYYY avec deux années consécutives.' });
   }
   try {
+    const studentResult = await db.query(
+      `SELECT id, filiere_id, niveau FROM etudiants WHERE id = $1`,
+      [Number(etudiant_id)]
+    );
+    const student = studentResult.rows[0];
+    if (!student) return res.status(404).json({ error: 'Étudiant introuvable.' });
+
+    const courseResult = await db.query(
+      `SELECT id, filiere_id, niveau FROM unites_enseignement WHERE id = $1`,
+      [Number(ue_id)]
+    );
+    const course = courseResult.rows[0];
+    if (!course) return res.status(404).json({ error: 'Unité d’enseignement introuvable.' });
+
+    if (Number(student.filiere_id) !== Number(course.filiere_id) || String(student.niveau) !== String(course.niveau)) {
+      return res.status(400).json({ error: 'L’UE doit appartenir au même programme et au même niveau que l’étudiant.' });
+    }
+
+    const existing = await db.query(
+      `SELECT id FROM inscriptions_ue WHERE etudiant_id = $1 AND ue_id = $2 AND annee_academique = $3 LIMIT 1`,
+      [Number(etudiant_id), Number(ue_id), String(annee_academique).trim()]
+    );
+    if (existing.rows[0]) {
+      return res.status(409).json({ error: 'Cet étudiant est déjà inscrit à cette UE pour cette année académique.' });
+    }
+
     const { rows } = await db.query(
       `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique)
        VALUES ($1, $2, $3)

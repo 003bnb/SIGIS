@@ -57,6 +57,7 @@ Les scripts `schema.sql` et `seeds.sql` sont exécutés automatiquement par Post
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/001_academic_validation.sql
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/002_admission_workflow.sql
 docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/003_audit_logs.sql
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < database/migrations/004_business_rules.sql
 ```
 
 Les migrations refusent les données existantes qui ne respectent pas les contraintes (notamment les doublons email/année). Corrigez-les avant de les appliquer. Pour injecter à nouveau les données de démonstration dans la base courante :
@@ -87,7 +88,7 @@ Ces comptes et mots de passe sont réservés au développement local. Désactive
 - Tableau de bord : effectifs actifs, candidatures en attente, UE et notes saisies.
 - Création et consultation des dossiers étudiants.
 - Saisie et mise à jour des notes de contrôle continu (`CC`) et d’examen (`EXAM`).
-- Relevé de notes avec moyenne d’UE `CC × 40 % + examen × 60 %` (une note disponible est affichée seule), puis moyenne générale pondérée uniquement par les ECTS. Le coefficient de l’UE n’intervient pas dans ce calcul. La moyenne générale reste indisponible tant qu’une UE inscrite n’a aucune note. Une UE est validée à partir de 10/20.
+- Relevé de notes avec moyenne d’UE `CC × 40 % + meilleure note EXAM/RATTRAPAGE × 60 %` (une note disponible est affichée seule), puis moyenne générale pondérée uniquement par les ECTS. Le coefficient de l’UE n’intervient pas dans ce calcul. La moyenne générale reste indisponible tant qu’une UE inscrite n’a aucune note. Une UE est validée à partir de 10/20. L’année est validée si toutes les UE sont notées et au moins 60 ECTS sont validés ; sinon la décision calculée est `REDOUBLEMENT` (`EN_COURS` si notes incomplètes). Les notes sont verrouillées à la saisie ; la scolarité ne peut pas modifier une note verrouillée, un administrateur peut modifier/déverrouiller.
 - Niveaux autorisés : `L1`, `L2`, `L3`, `M1`, `M2`. Les années académiques suivent le format `YYYY-YYYY` avec deux années consécutives, et les semestres sont numérotés de 1 à 10.
 
 Le calcul s’effectue sur les inscriptions de l’année académique active du dossier étudiant. La pondération CC/examen est une règle de démonstration et doit être validée par l’établissement avant l’usage officiel. L’acceptation d’une candidature crée le dossier administratif, mais pas de compte de connexion étudiant : celui-ci doit être créé séparément.
@@ -130,6 +131,8 @@ Documentation détaillée des endpoints : [docs/API.md](docs/API.md).
 ## Vérification CI
 
 Le workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) construit les services Docker (`db`, `backend`), attend la disponibilité de l’API, puis exécute `npm test` dans le conteneur backend. En cas d’échec, consultez les journaux du job GitHub Actions correspondant (étapes *Wait for backend health* et *Show logs on failure*).
+
+La checklist d’exploitation avant mise en service est disponible dans [docs/OPERATIONS_CHECKLIST.md](docs/OPERATIONS_CHECKLIST.md).
 
 ## Sauvegarde et restauration
 
@@ -202,16 +205,20 @@ Répartition initiale proposée pour l’onboarding, à ajuster selon les compé
 
 Pour toute contribution : créer une branche dédiée, documenter les changements de schéma, vérifier les rôles et les entrées de l’API, puis valider le parcours concerné sur Docker Compose avant revue.
 
-## Règles métier à préciser
+## Règles métier implémentées / à préciser
 
-Certaines règles académiques ne sont pas encore spécifiées formellement et ne sont **pas inventées** dans l’implémentation actuelle (seules des validations techniques sûres sont appliquées : formats, plages, contraintes d’intégrité, contrôles d’accès, calculs de notes explicitement définis). À valider et implémenter avec le référent métier :
+Règles implémentées (décisions confirmées) :
+- **Notes** : `CC × 40 % + meilleure note EXAM/RATTRAPAGE × 60 %` (best-of rattrapage) ; note disponible seule si l’autre composante est absente. Notes verrouillées à la saisie ; la scolarité ne peut pas modifier une note verrouillée, un administrateur peut modifier/déverrouiller (`verrouillee=false`).
+- **Progression** : UE validée si moyenne >= 10/20. Année validée si toutes les UE inscrites sont notées et au moins 60 ECTS validés ; sinon décision `REDOUBLEMENT` (`EN_COURS` tant que des notes manquent). La décision est calculée dans le relevé ; l’application administrative du statut étudiant reste une action explicite.
+- **Inscriptions UE** : l’UE doit appartenir au même programme et au même niveau que l’étudiant ; une seule inscription par étudiant/UE/année académique.
 
-- **Passage / validation** : conditions de validation d’une UE, d’un semestre ou d’une année (seuils, compensation, ECTS requis, mentions).
-- **Redoublement** : critères, conservation des crédits/notes, nombre de tentatives, impact sur les inscriptions et le statut étudiant.
-- **Jury / décisions académiques** : processus, rôles, traçabilité des délibérations, décisions exceptionnelles et recours.
-- **Parcours et inscriptions** : prérequis/co-requis entre UE, règles d’inscription par niveau/semestre/filière, capacité, périodes d’inscription.
-- **Notes et évaluations** : barèmes particuliers, sessions de rattrapage, absence/dispense, arrondis officiels et verrouillage après validation.
-- **Dossiers et comptes** : cycle de vie complet des comptes (invitation/activation/réinitialisation), pièces complémentaires exigibles, conservation/archivage des données (RGPD/réglementation locale).
+Points restant à préciser/implémenter (non inventés) :
+- **Passage / compensation / mentions** : compensation entre UE/semestres, mentions, seuils spécifiques par filière/niveau.
+- **Redoublement détaillé** : nombre de tentatives, conservation des crédits/notes, règles d’inscription après redoublement, impact automatique ou manuel sur le statut.
+- **Jury / décisions académiques** : processus de délibération, rôles, traçabilité, décisions exceptionnelles et recours.
+- **Parcours et inscriptions avancés** : prérequis/co-requis, capacités, périodes d’inscription, exceptions pédagogiques.
+- **Notes et évaluations avancées** : absences/dispenses, barèmes particuliers, arrondis officiels, règles de session/rattrapage complémentaires.
+- **Dossiers et comptes** : invitation/activation email, pièces complémentaires, conservation/archivage RGPD/réglementation locale.
 
 ## Sécurité et journalisation (socle)
 

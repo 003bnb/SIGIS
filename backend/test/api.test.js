@@ -11,6 +11,7 @@ const testStudentIds = [];
 const testUserIds = [];
 const testCourseIds = [];
 const testEnrollmentIds = [];
+const testFiliereIds = [];
 
 async function request(path, { method = 'GET', body, file, token } = {}) {
   const headers = {};
@@ -82,6 +83,9 @@ test('admission acceptance creates one student file and role access stays scoped
     if (candidateIds.length) {
       await db.query('DELETE FROM etudiants WHERE candidat_id = ANY($1::bigint[])', [candidateIds]);
       await db.query('DELETE FROM candidats WHERE id = ANY($1::bigint[])', [candidateIds]);
+    }
+    if (testFiliereIds.length) {
+      await db.query('DELETE FROM filieres WHERE id = ANY($1::bigint[])', [testFiliereIds]);
     }
     await db.end();
   });
@@ -550,7 +554,7 @@ test('admission acceptance creates one student file and role access stays scoped
     body: {
       code: `UE-TASK-${randomUUID().slice(0, 8)}`,
       intitule: 'UE de test gestion',
-      filiere_id: programId,
+      filiere_id: testCourses.rows[0].filiere_id,
       niveau: 'L2',
       semestre: 4,
       ects: 3,
@@ -613,4 +617,124 @@ test('admission acceptance creates one student file and role access stays scoped
   });
   assert.equal(deletedEnrollment.status, 204);
   testEnrollmentIds.splice(testEnrollmentIds.indexOf(createdEnrollmentId), 1);
+
+  const lockedCourse = await db.query(
+    `INSERT INTO unites_enseignement (code, intitule, filiere_id, niveau, semestre, ects)
+     VALUES ($1, 'UE verrouillage', $2, 'L2', 4, 6)
+     RETURNING id`,
+    [`UE-LOCK-${randomUUID().slice(0, 8)}`, testCourses.rows[0].filiere_id]
+  );
+  testCourseIds.push(lockedCourse.rows[0].id);
+  const lockedEnrollment = await db.query(
+    `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique)
+     VALUES ($1, $2, '2026-2027')
+     RETURNING id`,
+    [testStudentId, lockedCourse.rows[0].id]
+  );
+  testEnrollmentIds.push(lockedEnrollment.rows[0].id);
+
+  const staffGrade = await request('/notes', {
+    method: 'POST',
+    token: staffToken,
+    body: { inscription_ue_id: lockedEnrollment.rows[0].id, type_evaluation: 'CC', note: 11 }
+  });
+  assert.equal(staffGrade.status, 200);
+  assert.equal(staffGrade.payload.grade.verrouillee, true);
+
+  const staffLockedUpdate = await request('/notes', {
+    method: 'POST',
+    token: staffToken,
+    body: { inscription_ue_id: lockedEnrollment.rows[0].id, type_evaluation: 'CC', note: 12 }
+  });
+  assert.equal(staffLockedUpdate.status, 403);
+
+  const adminUnlockUpdate = await request('/notes', {
+    method: 'POST',
+    token: adminToken,
+    body: { inscription_ue_id: lockedEnrollment.rows[0].id, type_evaluation: 'CC', note: 12, verrouillee: false }
+  });
+  assert.equal(adminUnlockUpdate.status, 200);
+  assert.equal(adminUnlockUpdate.payload.grade.verrouillee, false);
+
+  const examGrade = await request('/notes', {
+    method: 'POST',
+    token: adminToken,
+    body: { inscription_ue_id: lockedEnrollment.rows[0].id, type_evaluation: 'EXAM', note: 8 }
+  });
+  assert.equal(examGrade.status, 200);
+  const retakeGrade = await request('/notes', {
+    method: 'POST',
+    token: adminToken,
+    body: { inscription_ue_id: lockedEnrollment.rows[0].id, type_evaluation: 'RATTRAPAGE', note: 14 }
+  });
+  assert.equal(retakeGrade.status, 200);
+
+  const transcriptAfterRetake = await request(`/notes/student/${testStudentId}/transcript`, { token: adminToken });
+  assert.equal(transcriptAfterRetake.status, 200);
+  const retakeCourse = transcriptAfterRetake.payload.courses.find((course) => Number(course.inscription_ue_id) === Number(lockedEnrollment.rows[0].id));
+  assert.ok(retakeCourse);
+  assert.equal(retakeCourse.exam, 8);
+  assert.equal(retakeCourse.rattrapage, 14);
+  assert.equal(retakeCourse.exam_retenu, 14);
+  assert.equal(retakeCourse.average, 13.2);
+  assert.equal(retakeCourse.validee, true);
+
+  const otherProgram = await db.query(`INSERT INTO filieres (code, nom) VALUES ($1, $2) RETURNING id`, [`TST-${randomUUID().slice(0, 8)}`, `Filière test ${randomUUID().slice(0, 8)}`]);
+  testFiliereIds.push(otherProgram.rows[0].id);
+  const otherProgramCourse = await db.query(
+    `INSERT INTO unites_enseignement (code, intitule, filiere_id, niveau, semestre, ects)
+     VALUES ($1, 'UE autre programme', $2, 'L2', 4, 3)
+     RETURNING id`,
+    [`UE-OTH-${randomUUID().slice(0, 8)}`, otherProgram.rows[0].id]
+  );
+  testCourseIds.push(otherProgramCourse.rows[0].id);
+
+  const wrongProgramEnrollment = await request('/scolarite/enrollments', {
+    method: 'POST',
+    token: adminToken,
+    body: { etudiant_id: testStudentId, ue_id: otherProgramCourse.rows[0].id, annee_academique: '2026-2027' }
+  });
+  assert.equal(wrongProgramEnrollment.status, 400);
+
+  const duplicateEnrollment = await request('/scolarite/enrollments', {
+    method: 'POST',
+    token: adminToken,
+    body: { etudiant_id: testStudentId, ue_id: lockedCourse.rows[0].id, annee_academique: '2026-2027' }
+  });
+  assert.equal(duplicateEnrollment.status, 409);
+
+  const progressionStudent = await db.query(
+    `INSERT INTO etudiants (numero_etudiant, filiere_id, niveau, annee_academique)
+     VALUES ($1, $2, 'L1', '2026-2027')
+     RETURNING id`,
+    [`SIG-P-${randomUUID().slice(0, 20)}`, otherProgram.rows[0].id]
+  );
+  testStudentIds.push(progressionStudent.rows[0].id);
+  const adminUserIdRow = await db.query(`SELECT id FROM utilisateurs WHERE email = 'admin@sigis.local' LIMIT 1`);
+  const adminUserId = adminUserIdRow.rows[0].id;
+  for (let i = 0; i < 5; i += 1) {
+    const c = await db.query(
+      `INSERT INTO unites_enseignement (code, intitule, filiere_id, niveau, semestre, ects)
+       VALUES ($1, $2, $3, 'L1', 1, 12)
+       RETURNING id`,
+      [`UE-P-${randomUUID().slice(0, 6)}${i}`, `UE progression ${i}`, otherProgram.rows[0].id]
+    );
+    testCourseIds.push(c.rows[0].id);
+    const ins = await db.query(
+      `INSERT INTO inscriptions_ue (etudiant_id, ue_id, annee_academique) VALUES ($1, $2, '2026-2027') RETURNING id`,
+      [progressionStudent.rows[0].id, c.rows[0].id]
+    );
+    testEnrollmentIds.push(ins.rows[0].id);
+    await db.query(
+      `INSERT INTO notes (inscription_ue_id, type_evaluation, note, saisi_par, verrouillee, verrouillee_at)
+       VALUES ($1, 'EXAM', $2, $3, TRUE, NOW())`,
+      [ins.rows[0].id, i === 4 ? 8 : 12, adminUserId]
+    );
+  }
+  const progressionTranscript = await request(`/notes/student/${progressionStudent.rows[0].id}/transcript`, { token: adminToken });
+  assert.equal(progressionTranscript.status, 200);
+  assert.equal(progressionTranscript.payload.summary.ects_validated, 48);
+  assert.equal(progressionTranscript.payload.summary.ects_required, 60);
+  assert.equal(progressionTranscript.payload.summary.annee_validee, false);
+  assert.equal(progressionTranscript.payload.summary.decision, 'REDOUBLEMENT');
 });

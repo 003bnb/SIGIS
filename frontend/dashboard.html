@@ -56,8 +56,9 @@
         <form id="grade-form" class="grade-form">
           <div><label for="grade-student">Étudiant</label><select id="grade-student" required><option value="">Choisir</option></select></div>
           <div><label for="grade-course">Unité d’enseignement</label><select id="grade-course" required disabled><option value="">Choisir un étudiant</option></select></div>
-          <div><label for="grade-type">Évaluation</label><select id="grade-type"><option value="CC">Contrôle continu</option><option value="EXAM">Examen</option></select></div>
+          <div><label for="grade-type">Évaluation</label><select id="grade-type"><option value="CC">Contrôle continu</option><option value="EXAM">Examen</option><option value="RATTRAPAGE">Rattrapage</option></select></div>
           <div><label for="grade-value">Note / 20</label><input id="grade-value" type="number" min="0" max="20" step="0.01" required></div>
+          <div id="grade-unlock-wrap" class="hidden"><label><input id="grade-unlock" type="checkbox"> Déverrouiller/modifier (ADMIN)</label></div>
           <button class="button button-primary" type="submit">Enregistrer la note</button>
         </form>
         <p class="feedback" id="grade-feedback" role="status" aria-live="polite"></p>
@@ -72,8 +73,8 @@
       </div>
       <section class="panel">
         <div class="section-heading"><div><p class="eyebrow">Résultats</p><h2>Mon relevé de notes</h2></div></div>
-        <div class="table-wrap"><table><thead><tr><th>UE</th><th>Semestre</th><th>ECTS</th><th>CC</th><th>Examen</th><th>Moyenne</th></tr></thead>
-          <tbody id="transcript-rows"><tr><td colspan="6" class="muted">Chargement…</td></tr></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>UE</th><th>Semestre</th><th>ECTS</th><th>CC</th><th>Examen</th><th>Rattrapage</th><th>Moyenne</th><th>Décision</th></tr></thead>
+          <tbody id="transcript-rows"><tr><td colspan="8" class="muted">Chargement…</td></tr></tbody></table></div>
       </section>
       <section class="panel">
         <div class="section-heading"><div><p class="eyebrow">Parcours</p><h2>Mes inscriptions aux UE</h2></div></div>

@@ -115,10 +115,13 @@ CREATE INDEX IF NOT EXISTS idx_inscriptions_ue_etudiant
 CREATE TABLE IF NOT EXISTS notes (
     id BIGSERIAL PRIMARY KEY,
     inscription_ue_id BIGINT NOT NULL REFERENCES inscriptions_ue(id) ON DELETE CASCADE,
-    type_evaluation VARCHAR(10) NOT NULL CHECK (type_evaluation IN ('CC', 'EXAM')),
+    type_evaluation VARCHAR(12) NOT NULL CHECK (type_evaluation IN ('CC', 'EXAM', 'RATTRAPAGE')),
     note NUMERIC(4, 2) NOT NULL CHECK (note BETWEEN 0 AND 20),
     commentaire TEXT,
     saisi_par BIGINT REFERENCES utilisateurs(id) ON DELETE SET NULL,
+    verrouillee BOOLEAN NOT NULL DEFAULT FALSE,
+    verrouillee_at TIMESTAMPTZ,
+    verrouillee_par BIGINT REFERENCES utilisateurs(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (inscription_ue_id, type_evaluation)
@@ -139,4 +142,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename VARCHAR(255) PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);

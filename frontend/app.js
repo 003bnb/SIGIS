@@ -200,12 +200,18 @@ async function loadMyTranscript() {
   document.querySelector('#my-program').textContent = `${student.filiere} · ${student.niveau}`;
   document.querySelector('#my-average').textContent = summary.average === null ? '—' : `${formatNumber(summary.average)} / 20`;
   document.querySelector('#my-ects').textContent = formatNumber(summary.ects_validated);
-  document.querySelector('#my-ects-total').textContent = `sur ${formatNumber(summary.ects_total)} ECTS`;
-  document.querySelector('#transcript-rows').innerHTML = courses.length ? courses.map((course) => `<tr>
+  const decisionLabels = { EN_COURS: 'En cours', ADMIS: 'Année validée', REDOUBLEMENT: 'Redoublement' };
+  const decision = decisionLabels[summary.decision] || summary.decision || '—';
+  document.querySelector('#my-ects-total').textContent = `sur ${formatNumber(summary.ects_total)} ECTS · ${decision}`;
+  document.querySelector('#transcript-rows').innerHTML = courses.length ? courses.map((course) => {
+    const status = course.validee ? 'Validée' : (course.average === null ? 'En cours' : 'Non validée');
+    return `<tr>
     <td><strong>${escapeHtml(course.code)}</strong><br><span class="muted">${escapeHtml(course.intitule)}</span></td>
     <td>${escapeHtml(course.semestre)}</td><td>${formatNumber(course.ects)}</td>
-    <td>${formatNumber(course.cc)}</td><td>${formatNumber(course.exam)}</td><td>${formatNumber(course.average)}</td>
-  </tr>`).join('') : '<tr><td colspan="6" class="muted">Aucune inscription pédagogique pour le moment.</td></tr>';
+    <td>${formatNumber(course.cc)}</td><td>${formatNumber(course.exam)}</td><td>${formatNumber(course.rattrapage)}</td>
+    <td>${formatNumber(course.average)}</td><td>${escapeHtml(status)}</td>
+  </tr>`;
+  }).join('') : '<tr><td colspan="8" class="muted">Aucune inscription pédagogique pour le moment.</td></tr>';
 }
 
 async function loadMyEnrollments() {
@@ -374,6 +380,9 @@ async function initDashboard() {
       document.querySelector('#courses-panel')?.classList.remove('hidden');
       document.querySelector('#enrollments-panel')?.classList.remove('hidden');
     }
+    if (user.role === 'ADMIN') {
+      document.querySelector('#grade-unlock-wrap')?.classList.remove('hidden');
+    }
 
     await Promise.all(tasks);
   } catch (error) {
@@ -442,14 +451,14 @@ async function initDashboard() {
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
-      await api('/notes', {
-        method: 'POST',
-        body: JSON.stringify({
-          inscription_ue_id: form.elements['grade-course'].value,
-          type_evaluation: form.elements['grade-type'].value,
-          note: form.elements['grade-value'].value
-        })
-      });
+      const payload = {
+        inscription_ue_id: form.elements['grade-course'].value,
+        type_evaluation: form.elements['grade-type'].value,
+        note: form.elements['grade-value'].value
+      };
+      const unlock = document.querySelector('#grade-unlock');
+      if (unlock?.checked) payload.verrouillee = false;
+      await api('/notes', { method: 'POST', body: JSON.stringify(payload) });
       showFeedback(gradeFeedback, 'Note enregistrée avec succès.', 'success');
       form.elements['grade-value'].value = '';
       const { indicators } = await api('/scolarite/dashboard');
